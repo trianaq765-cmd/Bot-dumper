@@ -1,72 +1,108 @@
 import discord
+import requests
 import os
 import io
-import requests # Kita kembali ke requests biasa karena ScraperAPI yang handle sisanya
+from discord import app_commands
 from discord.ext import commands
 from keep_alive import keep_alive
 
+# Setup Bot
 intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents) # Prefix buat cadangan
 
-# Ambil API Key dari Environment Render
-SCRAPER_KEY = os.getenv("SCRAPER_API_KEY") # Masukkan key kamu di Render
+# Ambil API Key ScraperAPI dari Environment Render
+SCRAPER_KEY = os.getenv("SCRAPER_API_KEY")
 
-@bot.command()
-async def dump(ctx, url: str = None):
-    if not url: return await ctx.send("❌ `!dump <url>`")
+# Header Palsu (Meniru Executor Delta Android)
+EXECUTOR_HEADERS = {
+    "User-Agent": "Delta Android/2.0",
+    "Accept-Encoding": "gzip",
+    "Connection": "Keep-Alive"
+}
+
+@bot.event
+async def on_ready():
+    print(f'🔥 Bot Masuk sebagai: {bot.user}')
     
-    status_msg = await ctx.send(f"🔄 **Dumping via Residential Proxy Network...**\nTarget: `{url}`")
+    # Sinkronisasi Slash Commands ke Discord
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Berhasil sinkronisasi {len(synced)} slash commands!")
+    except Exception as e:
+        print(f"❌ Gagal sinkronisasi: {e}")
+
+# === SLASH COMMAND: /dump ===
+@bot.tree.command(name="dump", description="Ambil script menggunakan Residential IP (Anti-Blokir)")
+@app_commands.describe(url="Masukkan URL Script (Raw/Junkie/Pastebin)")
+async def dump(interaction: discord.Interaction, url: str):
+    
+    # 1. Defer: Memberi tahu Discord "Tunggu sebentar" (Agar tidak timeout)
+    await interaction.response.defer()
+
+    if not SCRAPER_KEY:
+        return await interaction.followup.send("❌ **Error:** API Key Scraper belum disetting di server!")
 
     try:
-        # Konfigurasi payload untuk ScraperAPI
-        # 'keep_headers': 'true' -> Agar server target tetap melihat User-Agent palsu kita (Delta/Synapse)
+        # 2. Setup Request ke ScraperAPI
         payload = {
             'api_key': SCRAPER_KEY,
             'url': url,
-            'keep_headers': 'true'
-        }
-        
-        # Header Executor Palsu
-        headers = {
-            "User-Agent": "Delta Android/2.0",
-            "Accept-Encoding": "gzip"
+            'keep_headers': 'true', # Wajib true agar User-Agent Delta kita tidak dihapus
+            # 'premium': 'true'     # Aktifkan ini HANYA jika kamu beli paket berbayar ScraperAPI
         }
 
-        # Tembak ke ScraperAPI -> Mereka tembak ke Target pakai IP Residential -> Balik ke kita
-        response = requests.get('http://api.scraperapi.com', params=payload, headers=headers, timeout=60)
+        # 3. Kirim Request
+        # Kita request ke API Scraper -> Mereka request ke Target -> Balik ke kita
+        response = requests.get(
+            'http://api.scraperapi.com', 
+            params=payload, 
+            headers=EXECUTOR_HEADERS, 
+            timeout=60 # Timeout panjang karena proxy residential kadang lambat
+        )
 
+        # 4. Cek Hasil
         if response.status_code == 200:
             content = response.text
-            if not content: return await status_msg.edit(content="⚠️ Kosong.")
             
+            if not content:
+                return await interaction.followup.send("⚠️ **File Ditemukan tapi Kosong.**")
+
+            # Simpan ke memori sebagai file virtual
             file_data = io.BytesIO(content.encode("utf-8"))
-            await status_msg.delete()
-            await ctx.send(
-                content=f"✅ **Sukses!** (IP: Hidden Residential)\nSize: `{len(content)} bytes`",
-                file=discord.File(file_data, filename="Dumped.lua")
+            
+            # Buat Embed Cantik
+            embed = discord.Embed(title="✅ Script Dumped!", color=discord.Color.green())
+            embed.add_field(name="Target", value=f"`{url}`", inline=False)
+            embed.add_field(name="Size", value=f"`{len(content)} bytes`", inline=True)
+            embed.add_field(name="Route", value="`Residential Proxy (ScraperAPI)`", inline=True)
+            embed.set_footer(text="Powered by Executor Emulator")
+
+            # Kirim File + Embed
+            await interaction.followup.send(
+                embed=embed,
+                file=discord.File(file_data, filename="Dumped_Script.lua")
             )
+            
+        elif response.status_code == 403:
+            await interaction.followup.send(f"🛡️ **Terblokir (403).**\nTarget memiliki proteksi sangat tinggi atau API Key habis.")
+            
+        elif response.status_code == 404:
+            await interaction.followup.send(f"❌ **Tidak Ditemukan (404).**\nCek kembali URL kamu.")
+            
         else:
-            await status_msg.edit(content=f"❌ Gagal: {response.status_code}\nRespon: {response.text[:100]}")
+            await interaction.followup.send(f"❌ **Gagal:** Server merespon dengan kode `{response.status_code}`")
 
     except Exception as e:
-        await status_msg.edit(content=f"💀 Error: {str(e)}")
+        await interaction.followup.send(f"💀 **System Error:** `{str(e)}`")
 
+# Jalankan Web Server (Supaya Render tidak mati)
 keep_alive()
+
+# Jalankan Bot
 try:
     bot.run(os.getenv("DISCORD_TOKEN"))
 except:
-    print("Token Error")    
-    if not proxies:
-        return None
-        
-    # Ambil 1 proxy secara acak
-    proxy_ip = random.choice(proxies)
-    return {
-        "http": f"http://{proxy_ip}",
-        "https": f"http://{proxy_ip}"
-    }
-
+    print("❌ Token Discord salah atau tidak ada.")
 @bot.event
 async def on_ready():
     print(f'🤖 Bot {bot.user} Siap Tempur!')
