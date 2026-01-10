@@ -1,38 +1,62 @@
 import discord
-import requests
 import os
 import io
-import random
+import requests # Kita kembali ke requests biasa karena ScraperAPI yang handle sisanya
 from discord.ext import commands
 from keep_alive import keep_alive
 
-# ================= KONFIGURASI =================
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 1. DAFTAR USER-AGENT EXECUTOR (Identitas Palsu)
-EXECUTOR_AGENTS = [
-    "Roblox/WinInet",                       # Standar PC
-    "Delta Android/2.0",                    # Delta Mobile
-    "Fluxus Android/2.0",                   # Fluxus Mobile
-    "Arceus X/3.0",                         # Arceus X
-    "Synapse X/v2.19.8b",                   # Synapse PC
-    "Krnl/Client",                          # Krnl PC
-    "Hydrogen/1.0 Android",                 # Hydrogen
-    "Codex/Android/2.1",                    # Codex
-    "Sentinel/v3",                          # Sentinel
-    "ScriptWare/iOS/1.0"                    # Script-Ware
-]
+# Ambil API Key dari Environment Render
+SCRAPER_KEY = os.getenv("SCRAPER_API_KEY") # Masukkan key kamu di Render
 
-# 2. LOAD PROXIES (IP Palsu)
-def get_proxy():
-    if not os.path.exists("proxies.txt"):
-        return None
+@bot.command()
+async def dump(ctx, url: str = None):
+    if not url: return await ctx.send("❌ `!dump <url>`")
     
-    with open("proxies.txt", "r") as f:
-        proxies = [line.strip() for line in f if line.strip()]
-    
+    status_msg = await ctx.send(f"🔄 **Dumping via Residential Proxy Network...**\nTarget: `{url}`")
+
+    try:
+        # Konfigurasi payload untuk ScraperAPI
+        # 'keep_headers': 'true' -> Agar server target tetap melihat User-Agent palsu kita (Delta/Synapse)
+        payload = {
+            'api_key': SCRAPER_KEY,
+            'url': url,
+            'keep_headers': 'true'
+        }
+        
+        # Header Executor Palsu
+        headers = {
+            "User-Agent": "Delta Android/2.0",
+            "Accept-Encoding": "gzip"
+        }
+
+        # Tembak ke ScraperAPI -> Mereka tembak ke Target pakai IP Residential -> Balik ke kita
+        response = requests.get('http://api.scraperapi.com', params=payload, headers=headers, timeout=60)
+
+        if response.status_code == 200:
+            content = response.text
+            if not content: return await status_msg.edit(content="⚠️ Kosong.")
+            
+            file_data = io.BytesIO(content.encode("utf-8"))
+            await status_msg.delete()
+            await ctx.send(
+                content=f"✅ **Sukses!** (IP: Hidden Residential)\nSize: `{len(content)} bytes`",
+                file=discord.File(file_data, filename="Dumped.lua")
+            )
+        else:
+            await status_msg.edit(content=f"❌ Gagal: {response.status_code}\nRespon: {response.text[:100]}")
+
+    except Exception as e:
+        await status_msg.edit(content=f"💀 Error: {str(e)}")
+
+keep_alive()
+try:
+    bot.run(os.getenv("DISCORD_TOKEN"))
+except:
+    print("Token Error")    
     if not proxies:
         return None
         
