@@ -64,6 +64,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,uid INTEGER,gid INTEGER,cmd TEXT,prompt TEXT,resp TEXT,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS blacklist(uid INTEGER PRIMARY KEY,reason TEXT,by_uid INTEGER);
             CREATE TABLE IF NOT EXISTS stats(id INTEGER PRIMARY KEY,cmd TEXT,uid INTEGER,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS user_prefs(uid INTEGER PRIMARY KEY,model TEXT DEFAULT 'auto',updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
         ''')
     def log(self,uid,gid,cmd,p,r):
         self.conn.execute('INSERT INTO history(uid,gid,cmd,prompt,resp)VALUES(?,?,?,?,?)',(uid,gid,cmd,p,r[:4000]if r else""))
@@ -83,6 +84,12 @@ class Database:
         self.conn.commit()
     def get_stats(self):
         return self.conn.execute('SELECT cmd,COUNT(*)FROM stats GROUP BY cmd ORDER BY COUNT(*)DESC').fetchall()
+    def get_user_model(self,uid):
+        r=self.conn.execute('SELECT model FROM user_prefs WHERE uid=?',(uid,)).fetchone()
+        return r[0] if r else "auto"
+    def set_user_model(self,uid,model):
+        self.conn.execute('INSERT OR REPLACE INTO user_prefs(uid,model,updated)VALUES(?,?,CURRENT_TIMESTAMP)',(uid,model))
+        self.conn.commit()
 db=Database()
 class RL:
     def __init__(self):
@@ -124,16 +131,22 @@ class Msg:
 class Memory:
     def __init__(self):
         self.data=defaultdict(list)
-    def add(self,uid,role,txt):
+    def add(self,uid,role,content):
         now=time.time()
-        self.data[uid]=[m for m in self.data[uid]if now-m.ts<1800]
-        self.data[uid].append(Msg(role,txt,now))
-        if len(self.data[uid])>10:
-            self.data[uid]=self.data[uid][-10:]
+        self.data[uid]=[m for m in self.data[uid] if now-m.ts<3600]
+        self.data[uid].append(Msg(role,content,now))
+        if len(self.data[uid])>20:
+            self.data[uid]=self.data[uid][-20:]
     def get(self,uid):
-        return[{"role":m.role,"content":m.content}for m in self.data[uid]]
+        now=time.time()
+        valid=[m for m in self.data[uid] if now-m.ts<3600]
+        self.data[uid]=valid
+        return[{"role":m.role,"content":m.content}for m in valid]
     def clear(self,uid):
         self.data[uid]=[]
+    def get_last_n(self,uid,n=10):
+        msgs=self.get(uid)
+        return msgs[-n:] if len(msgs)>n else msgs
 mem=Memory()
 class FileReader:
     @staticmethod
@@ -259,6 +272,16 @@ OR_FREE={
     "mistral":"mistralai/mistral-7b-instruct:free",
     "qwen":"qwen/qwen-2-7b-instruct:free",
     "deepseek":"deepseek/deepseek-r1:free"
+}
+MODEL_NAMES={
+    "auto":"🚀 Auto",
+    "groq":"⚡ Groq",
+    "cerebras":"🧠 Cerebras",
+    "sambanova":"🦣 SambaNova",
+    "cohere":"🔷 Cohere",
+    "or_llama":"🦙 OpenRouter Llama",
+    "or_gemini":"🔵 OpenRouter Gemini",
+    "pollinations":"🌺 Pollinations"
 }
 def call_groq(msgs):
     cl=get_groq()
@@ -386,33 +409,52 @@ def call_pollinations(prompt):
     except Exception as e:
         logger.error(f"Pollinations: {e}")
         return None
-def ask_ai(prompt,uid=None,model="auto"):
-    msgs=[{"role":"system","content":EXCEL_PROMPT},{"role":"user","content":prompt}]
-    if uid:
-        history=mem.get(uid)
-        if history:
-            msgs=[{"role":"system","content":EXCEL_PROMPT}]+history+[{"role":"user","content":prompt}]
-    result=None
-    used_model="none"
+def call_model_direct(model,msgs,prompt):
+    """Call specific model directly"""
     if model=="groq":
-        result=call_groq(msgs)
-        used_model="Groq" if result else "none"
+        return call_groq(msgs),"Groq"
     elif model=="cerebras":
-        result=call_cerebras(msgs)
-        used_model="Cerebras" if result else "none"
+        return call_cerebras(msgs),"Cerebras"
     elif model=="sambanova":
-        result=call_sambanova(msgs)
-        used_model="SambaNova" if result else "none"
+        return call_sambanova(msgs),"SambaNova"
     elif model=="cohere":
-        result=call_cohere(msgs)
-        used_model="Cohere" if result else "none"
+        return call_cohere(msgs),"Cohere"
     elif model=="pollinations":
-        result=call_pollinations(prompt)
-        used_model="Pollinations" if result else "none"
+        return call_pollinations(prompt),"Pollinations"
     elif model.startswith("or_"):
         mk=model[3:]
-        result=call_openrouter(msgs,mk)
-        used_model=f"OpenRouter({mk})" if result else "none"
+        return call_openrouter(msgs,mk),f"OpenRouter({mk})"
+    return None,"none"
+def ask_ai(prompt,uid=None,model=None):
+    """Main AI function with persistent model preference"""
+    if model is None or model=="auto":
+        if uid:
+            model=db.get_user_model(uid)
+        else:
+            model="auto"
+    if uid and model!="auto":
+        db.set_user_model(uid,model)
+    msgs=[{"role":"system","content":EXCEL_PROMPT}]
+    if uid:
+        history=mem.get_last_n(uid,10)
+        if history:
+            msgs.extend(history)
+    msgs.append({"role":"user","content":prompt})
+    result=None
+    used_model="none"
+    if model!="auto":
+        result,used_model=call_model_direct(model,msgs,prompt)
+        if not result:
+            logger.info(f"{model} failed, trying fallback...")
+            for fn,name in [
+                (lambda:call_groq(msgs),"Groq"),
+                (lambda:call_cerebras(msgs),"Cerebras"),
+                (lambda:call_openrouter(msgs,"llama"),"OpenRouter")
+            ]:
+                result=fn()
+                if result:
+                    used_model=f"{name}(fallback)"
+                    break
     else:
         for fn,name in [
             (lambda:call_groq(msgs),"Groq"),
@@ -429,16 +471,19 @@ def ask_ai(prompt,uid=None,model="auto"):
                     break
             except:
                 continue
-    if not result and model!="auto":
-        result=call_groq(msgs)
-        if result:
-            used_model="Groq(fallback)"
     if not result:
         result='{"action":"text_only","message":"❌ Semua AI tidak tersedia."}'
         used_model="none"
     if uid and result:
         mem.add(uid,"user",prompt)
-        mem.add(uid,"assistant",result)
+        clean_response=result
+        try:
+            parsed=json.loads(result)
+            if "message" in parsed:
+                clean_response=parsed["message"]
+        except:
+            pass
+        mem.add(uid,"assistant",clean_response[:2000])
     return result,used_model
 def fix_json(t):
     t=t.strip()
@@ -513,7 +558,7 @@ def extract_potential_links(html):
             if m:
                 links.add(m)
     return[l for l in links if l.startswith("http")]
-async def process_ai_request(prompt,uid,gid,attachments=None,model="auto"):
+async def process_ai_request(prompt,uid,gid,attachments=None,model=None):
     parts=[prompt]
     if attachments:
         for att in attachments:
@@ -580,11 +625,13 @@ async def on_message(message):
             async with message.channel.typing():
                 try:
                     attachments=list(message.attachments) if message.attachments else None
+                    user_model=db.get_user_model(message.author.id)
                     parsed,resp,used=await process_ai_request(
                         content,
                         message.author.id,
                         message.guild.id if message.guild else None,
-                        attachments
+                        attachments,
+                        user_model
                     )
                     action=parsed.get("action","text_only")
                     msg=parsed.get("message","")
@@ -604,13 +651,17 @@ async def on_message(message):
                         if not msg:
                             msg=resp
                         chunks=split_msg(msg)
-                        await message.reply(f"**🤖 {used}:**\n{chunks[0]}")
+                        current_model=db.get_user_model(message.author.id)
+                        model_display=MODEL_NAMES.get(current_model,current_model)
+                        await message.reply(f"**🤖 {used}** (default: {model_display}):\n{chunks[0]}")
                         for c in chunks[1:]:
                             await message.channel.send(c)
                 except Exception as ex:
                     await message.reply(f"❌ Error: `{ex}`")
         else:
-            await message.reply(f"👋 Hai! Ketik pertanyaan setelah mention saya.\nContoh: `@{bot.user.name} apa itu rumus VLOOKUP?`")
+            current_model=db.get_user_model(message.author.id)
+            model_display=MODEL_NAMES.get(current_model,current_model)
+            await message.reply(f"👋 Hai! Model kamu: **{model_display}**\n\nKetik pertanyaan setelah mention.\nGanti model: `{PREFIX}model <nama>`")
         return
     await bot.process_commands(message)
 @bot.tree.error
@@ -619,6 +670,24 @@ async def on_error(i,e):
         await i.response.send_message(f"❌ {str(e)[:100]}",ephemeral=True)
     except:
         pass
+@bot.command(name="model",aliases=["setmodel","m"])
+async def prefix_model(ctx,model:str=None):
+    """Set atau lihat model AI default"""
+    valid_models=["auto","groq","cerebras","sambanova","cohere","or_llama","or_gemini","pollinations"]
+    if not model:
+        current=db.get_user_model(ctx.author.id)
+        model_display=MODEL_NAMES.get(current,current)
+        e=discord.Embed(title="🤖 Model AI Kamu",color=0x3498DB)
+        e.add_field(name="Current",value=f"**{model_display}**",inline=False)
+        e.add_field(name="Available",value="\n".join([f"`{k}` - {v}" for k,v in MODEL_NAMES.items()]),inline=False)
+        e.add_field(name="Usage",value=f"`{PREFIX}model <nama>`\nContoh: `{PREFIX}model cerebras`",inline=False)
+        return await ctx.reply(embed=e)
+    model=model.lower()
+    if model not in valid_models:
+        return await ctx.reply(f"❌ Model tidak valid!\nPilihan: `{', '.join(valid_models)}`")
+    db.set_user_model(ctx.author.id,model)
+    model_display=MODEL_NAMES.get(model,model)
+    await ctx.reply(f"✅ Model default diubah ke: **{model_display}**\n\nSemua chat berikutnya akan menggunakan model ini.")
 @bot.command(name="ai",aliases=["ask","chat","tanya"])
 async def prefix_ai(ctx,*,prompt:str=None):
     if db.banned(ctx.author.id):
@@ -631,11 +700,13 @@ async def prefix_ai(ctx,*,prompt:str=None):
     async with ctx.typing():
         try:
             attachments=list(ctx.message.attachments) if ctx.message.attachments else None
+            user_model=db.get_user_model(ctx.author.id)
             parsed,resp,used=await process_ai_request(
                 prompt or "Analisis file ini",
                 ctx.author.id,
                 ctx.guild.id if ctx.guild else None,
-                attachments
+                attachments,
+                user_model
             )
             action=parsed.get("action","text_only")
             msg=parsed.get("message","")
@@ -698,30 +769,41 @@ async def prefix_dump(ctx,url:str=None,mode:str="auto"):
             await ctx.reply(f"💀 Error: `{ex}`")
 @bot.command(name="ping")
 async def prefix_ping(ctx):
+    current_model=db.get_user_model(ctx.author.id)
+    model_display=MODEL_NAMES.get(current_model,current_model)
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
+    e.add_field(name="Your Model",value=f"`{model_display}`")
+    chat_count=len(mem.get(ctx.author.id))
+    e.add_field(name="Chat History",value=f"`{chat_count} messages`")
     await ctx.reply(embed=e)
 @bot.command(name="help",aliases=["h"])
 async def prefix_help(ctx):
-    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot",color=0x217346)
-    e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`\n• **Slash**: `/ai pertanyaan`",inline=False)
-    e.add_field(name=f"🤖 {PREFIX}ai <prompt>",value="Tanya AI / Buat Excel",inline=False)
-    e.add_field(name=f"🔓 {PREFIX}dump <url>",value="Download script",inline=False)
-    e.add_field(name=f"🧹 {PREFIX}clear",value="Hapus memory",inline=False)
+    current_model=db.get_user_model(ctx.author.id)
+    model_display=MODEL_NAMES.get(current_model,current_model)
+    e=discord.Embed(title="📚 Excel AI Bot",description=f"Model kamu: **{model_display}**",color=0x217346)
+    e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`",inline=False)
+    e.add_field(name="🤖 AI Commands",value=f"`{PREFIX}ai <prompt>` - Tanya AI\n`{PREFIX}model <nama>` - Ganti model default\n`{PREFIX}clear` - Hapus chat history",inline=False)
+    e.add_field(name="🔓 Dump",value=f"`{PREFIX}dump <url>` - Download script",inline=False)
+    e.add_field(name="📋 Models",value="`auto` `groq` `cerebras` `sambanova` `cohere` `or_llama` `or_gemini` `pollinations`",inline=False)
     await ctx.reply(embed=e)
 @bot.command(name="clear",aliases=["reset"])
 async def prefix_clear(ctx):
     mem.clear(ctx.author.id)
-    await ctx.reply("🧹 Memory dihapus!")
+    await ctx.reply("🧹 Chat history dihapus! Percakapan dimulai dari awal.")
 @bot.command(name="history",aliases=["hist"])
 async def prefix_history(ctx,limit:int=5):
-    h=db.hist(ctx.author.id,min(limit,10))
+    h=mem.get_last_n(ctx.author.id,min(limit,10))
     if not h:
-        return await ctx.reply("📭 History kosong")
-    e=discord.Embed(title="📜 History",color=0x3498DB)
-    for idx,(p,r)in enumerate(h,1):
-        e.add_field(name=f"{idx}. {p[:30]}...",value=f"```{r[:50]}...```",inline=False)
+        return await ctx.reply("📭 Chat history kosong")
+    e=discord.Embed(title="📜 Chat History (Memory)",color=0x3498DB)
+    for idx,msg in enumerate(h,1):
+        role="👤 You" if msg["role"]=="user" else "🤖 AI"
+        content=msg["content"][:100]+"..." if len(msg["content"])>100 else msg["content"]
+        e.add_field(name=f"{idx}. {role}",value=f"```{content}```",inline=False)
+    current_model=db.get_user_model(ctx.author.id)
+    e.set_footer(text=f"Model: {MODEL_NAMES.get(current_model,current_model)} | {len(h)} messages in memory")
     await ctx.reply(embed=e)
 @bot.command(name="testai")
 @commands.is_owner()
@@ -759,17 +841,43 @@ async def prefix_stats(ctx):
     await ctx.reply(embed=e)
 @bot.tree.command(name="ping",description="🏓 Cek status")
 async def slash_ping(i:discord.Interaction):
+    current_model=db.get_user_model(i.user.id)
+    model_display=MODEL_NAMES.get(current_model,current_model)
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
-    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
+    e.add_field(name="Your Model",value=f"`{model_display}`")
     await i.response.send_message(embed=e)
+@bot.tree.command(name="model",description="🤖 Set model AI default")
+@app_commands.describe(model="Pilih model")
+@app_commands.choices(model=[
+    app_commands.Choice(name="🚀 Auto (Recommended)",value="auto"),
+    app_commands.Choice(name="⚡ Groq (Fast)",value="groq"),
+    app_commands.Choice(name="🧠 Cerebras (Fastest)",value="cerebras"),
+    app_commands.Choice(name="🦣 SambaNova",value="sambanova"),
+    app_commands.Choice(name="🔷 Cohere",value="cohere"),
+    app_commands.Choice(name="🦙 OpenRouter Llama",value="or_llama"),
+    app_commands.Choice(name="🔵 OpenRouter Gemini",value="or_gemini"),
+    app_commands.Choice(name="🌺 Pollinations",value="pollinations")
+])
+async def slash_model(i:discord.Interaction,model:str=None):
+    if model:
+        db.set_user_model(i.user.id,model)
+        model_display=MODEL_NAMES.get(model,model)
+        await i.response.send_message(f"✅ Model default: **{model_display}**\n\nSemua chat berikutnya menggunakan model ini.",ephemeral=True)
+    else:
+        current=db.get_user_model(i.user.id)
+        model_display=MODEL_NAMES.get(current,current)
+        await i.response.send_message(f"🤖 Model kamu: **{model_display}**",ephemeral=True)
 @bot.tree.command(name="help",description="📚 Panduan")
 async def slash_help(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot",color=0x217346)
-    e.add_field(name="💬 Cara Pakai",value=f"• Mention: @{bot.user.name} pertanyaan\n• Prefix: `{PREFIX}ai pertanyaan`\n• Slash: `/ai pertanyaan`",inline=False)
+    current_model=db.get_user_model(i.user.id)
+    model_display=MODEL_NAMES.get(current_model,current_model)
+    e=discord.Embed(title="📚 Excel AI Bot",description=f"Model: **{model_display}**",color=0x217346)
+    e.add_field(name="💬 Cara Pakai",value=f"• Mention: @{bot.user.name} pertanyaan\n• Prefix: `{PREFIX}ai pertanyaan`",inline=False)
+    e.add_field(name="🔧 Commands",value=f"`/model` - Ganti model\n`/clear` - Hapus history\n`/ai` - Tanya AI",inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="dump",description="🔓 Dump script")
-@app_commands.describe(url="URL script",mode="Mode")
+@app_commands.describe(url="URL",mode="Mode")
 @app_commands.choices(mode=[
     app_commands.Choice(name="Auto",value="auto"),
     app_commands.Choice(name="Stealth",value="stealth"),
@@ -805,23 +913,15 @@ async def slash_dump(i:discord.Interaction,url:str,mode:str="auto"):
     except Exception as ex:
         await i.followup.send(f"💀 Error: `{ex}`")
 @bot.tree.command(name="ai",description="🤖 Tanya AI")
-@app_commands.describe(perintah="Perintah",file="File",model="Model")
-@app_commands.choices(model=[
-    app_commands.Choice(name="Auto",value="auto"),
-    app_commands.Choice(name="Groq",value="groq"),
-    app_commands.Choice(name="Cerebras",value="cerebras"),
-    app_commands.Choice(name="SambaNova",value="sambanova"),
-    app_commands.Choice(name="Cohere",value="cohere"),
-    app_commands.Choice(name="OR Llama",value="or_llama"),
-    app_commands.Choice(name="Pollinations",value="pollinations")
-])
+@app_commands.describe(perintah="Perintah",file="File")
 @rate(10)
 @noban()
-async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=None,model:str="auto"):
+async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=None):
     await i.response.defer()
     try:
         attachments=[file] if file else None
-        parsed,resp,used=await process_ai_request(perintah,i.user.id,i.guild_id,attachments,model)
+        user_model=db.get_user_model(i.user.id)
+        parsed,resp,used=await process_ai_request(perintah,i.user.id,i.guild_id,attachments,user_model)
         action=parsed.get("action","text_only")
         msg=parsed.get("message","")
         if action=="generate_excel":
@@ -845,10 +945,10 @@ async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=No
                 await i.channel.send(c)
     except Exception as ex:
         await i.followup.send(f"❌ Error: `{ex}`")
-@bot.tree.command(name="clear",description="🧹 Hapus memory")
+@bot.tree.command(name="clear",description="🧹 Hapus chat history")
 async def slash_clear(i:discord.Interaction):
     mem.clear(i.user.id)
-    await i.response.send_message("🧹 Cleared!",ephemeral=True)
+    await i.response.send_message("🧹 Chat history dihapus!",ephemeral=True)
 @bot.tree.command(name="testai",description="🔧 Test AI")
 @owner()
 async def slash_testai(i:discord.Interaction):
