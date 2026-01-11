@@ -24,37 +24,63 @@ intents.message_content=True
 bot=commands.Bot(command_prefix="!",intents=intents)
 
 # === LAZY LOADERS ===
-_groq=_openai=_curl=_requests=_pd=_openpyxl=None
+_groq=_openai=_curl=_requests=_pd=_openpyxl=_session=None
+
 def get_groq():
     global _groq
     if _groq is None and KEY_GROQ:
         from groq import Groq
         _groq=Groq(api_key=KEY_GROQ)
     return _groq
+
 def get_openai():
     global _openai
     if _openai is None and KEY_OPENAI:
         from openai import OpenAI
         _openai=OpenAI(api_key=KEY_OPENAI)
     return _openai
+
 def get_curl():
     global _curl
     if _curl is None:
         from curl_cffi import requests as curl_requests
         _curl=curl_requests
     return _curl
+
 def get_requests():
     global _requests
     if _requests is None:
         import requests
         _requests=requests
     return _requests
+
+def get_session():
+    """Session dengan retry dan timeout yang lebih baik"""
+    global _session
+    if _session is None:
+        import requests
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
+        _session = requests.Session()
+        retry = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"]
+        )
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+        _session.mount("https://", adapter)
+        _session.mount("http://", adapter)
+    return _session
+
 def get_pandas():
     global _pd
     if _pd is None:
         import pandas as pd
         _pd=pd
     return _pd
+
 def get_openpyxl():
     global _openpyxl
     if _openpyxl is None:
@@ -85,17 +111,20 @@ class RL:
         self.cd[uid][cmd]=now
         return True,0
 rl=RL()
+
 def rate(s=5):
     async def p(i:discord.Interaction)->bool:
         ok,r=rl.ok(i.user.id,i.command.name,s)
         if not ok:await i.response.send_message(f"⏳ Tunggu **{r:.1f}s**",ephemeral=True);return False
         return True
     return app_commands.check(p)
+
 def owner():
     async def p(i:discord.Interaction)->bool:
         if i.user.id not in OWNER_IDS:await i.response.send_message("❌ Owner only!",ephemeral=True);return False
         return True
     return app_commands.check(p)
+
 def noban():
     async def p(i:discord.Interaction)->bool:
         if db.banned(i.user.id):await i.response.send_message("🚫 Blacklisted!",ephemeral=True);return False
@@ -106,6 +135,7 @@ def noban():
 @dataclass
 class Msg:
     role:str;content:str;ts:float
+
 class Memory:
     def __init__(self):self.data=defaultdict(list)
     def add(self,uid,role,txt):
@@ -225,8 +255,8 @@ def call_groq(msgs):
 def call_openrouter(msgs,mk="llama"):
     if not KEY_OPENROUTER:return None
     try:
-        req=get_requests()
-        r=req.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_OPENROUTER}","Content-Type":"application/json"},json={"model":OR_FREE.get(mk,OR_FREE["llama"]),"messages":msgs,"temperature":0.2,"max_tokens":8000},timeout=60)
+        session=get_session()
+        r=session.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_OPENROUTER}","Content-Type":"application/json"},json={"model":OR_FREE.get(mk,OR_FREE["llama"]),"messages":msgs,"temperature":0.2,"max_tokens":8000},timeout=60)
         if r.status_code==200:return r.json()["choices"][0]["message"]["content"]
     except Exception as e:logger.warning(f"OR:{e}")
     return None
@@ -247,8 +277,8 @@ def call_gemini(prompt):
 
 def call_pollinations(prompt):
     try:
-        req=get_requests()
-        r=req.get(f"https://text.pollinations.ai/{quote(EXCEL_PROMPT+' User: '+prompt[:2000])}",timeout=60)
+        session=get_session()
+        r=session.get(f"https://text.pollinations.ai/{quote(EXCEL_PROMPT+' User: '+prompt[:2000])}",timeout=60)
         if r.ok and len(r.text)>10:return r.text
     except:pass
     return None
@@ -264,7 +294,7 @@ def ask_ai(prompt,uid=None,model="auto"):
     elif model=="gemini":result=call_gemini(prompt);used="Gemini"
     elif model=="pollinations":result=call_pollinations(prompt);used="Pollinations"
     elif model.startswith("or_"):result=call_openrouter(msgs,model[3:]);used=f"OR({model[3:]})"
-    else: # auto
+    else:
         result=call_groq(msgs)
         if result:used="Groq"
         else:
@@ -277,7 +307,7 @@ def ask_ai(prompt,uid=None,model="auto"):
                     result=call_pollinations(prompt)
                     if result:used="Pollinations"
     
-    if not result and model!="auto": # Fallback
+    if not result and model!="auto":
         for f,n in[(lambda:call_groq(msgs),"Groq"),(lambda:call_openrouter(msgs),"OpenRouter"),(lambda:call_pollinations(prompt),"Pollinations")]:
             result=f()
             if result:used=f"{n}(FB)";break
@@ -309,7 +339,7 @@ def split_msg(t,lim=1900):
     if cur:ch.append(cur)
     return ch or[t[:lim]]
 
-# === HEADER SAKTI (Dari Referensi Anda) ===
+# === HEADER SAKTI ===
 def get_executor_headers():
     fake_place_id = random.choice(["2753915549", "6284583030", "155615604"])
     fake_job_id = os.urandom(16).hex()
@@ -347,45 +377,106 @@ async def dump(interaction: discord.Interaction, url: str):
     await interaction.response.defer()
 
     if not SCRAPER_KEY:
-        return await interaction.followup.send("❌ API Key Error")
+        return await interaction.followup.send("❌ SCRAPER_API_KEY tidak ditemukan!")
+
+    if not valid_url(url):
+        return await interaction.followup.send("❌ URL tidak valid!")
 
     try:
-        req = get_requests()
+        session = get_session()
+        fake_headers = get_executor_headers()
+
+        # ✅ FIX 1: Gunakan HTTPS bukan HTTP
+        # ✅ FIX 2: Timeout lebih panjang (60 detik)
+        # ✅ FIX 3: Retry otomatis via session
+        
         payload = {
             'api_key': SCRAPER_KEY,
             'url': url,
-            'keep_headers': 'true'
+            'keep_headers': 'true',
+            'render': 'false'  # Lebih cepat tanpa render JS
         }
-        fake_headers = get_executor_headers()
 
-        response = req.get(
-            'http://api.scraperapi.com', 
+        response = session.get(
+            'https://api.scraperapi.com',  # ✅ HTTPS bukan HTTP
             params=payload, 
             headers=fake_headers,
-            timeout=30
+            timeout=(10, 60)  # ✅ (connect_timeout, read_timeout)
         )
 
         if response.status_code == 200:
             content = response.text
-            if "<!DOCTYPE html>" in content or "<html" in content[:100]:
+            
+            # Deteksi tipe konten
+            if "<!DOCTYPE html>" in content or "<html" in content[:200].lower():
                 file_ext = "html"
-                status_text = "⚠️ **Peringatan:** Target mendeteksi bot dan mengirim Halaman Web."
-            else:
+                status_text = "⚠️ **Peringatan:** Target mengembalikan HTML (mungkin anti-bot)"
+            elif content.strip().startswith(('--[[', 'local ', 'function ', 'return ', 'game:', 'script')):
                 file_ext = "lua"
-                status_text = "✅ **Sukses!** Target mengira ini Executor Asli."
+                status_text = "✅ **Sukses!** Lua script berhasil didump"
+            elif content.strip().startswith(('{', '[')):
+                file_ext = "json"
+                status_text = "✅ **Sukses!** JSON response"
+            else:
+                file_ext = "txt"
+                status_text = "ℹ️ Response diterima (format tidak dikenali)"
 
             file_data = io.BytesIO(content.encode("utf-8"))
             
             db.stat("dump", interaction.user.id)
             await interaction.followup.send(
-                content=f"{status_text}\nSize: `{len(content)} bytes`",
-                file=discord.File(file_data, filename=f"Dump_Result.{file_ext}")
+                content=f"{status_text}\n📦 Size: `{len(content):,} bytes`",
+                file=discord.File(file_data, filename=f"dump_result.{file_ext}")
             )
+        elif response.status_code == 403:
+            await interaction.followup.send("❌ **403 Forbidden** - Target memblokir request")
+        elif response.status_code == 429:
+            await interaction.followup.send("⏳ **Rate Limited** - Coba lagi nanti")
+        elif response.status_code == 500:
+            await interaction.followup.send("❌ **500 Error** - ScraperAPI error, coba lagi")
         else:
-            await interaction.followup.send(f"❌ Gagal: {response.status_code}")
+            await interaction.followup.send(f"❌ HTTP Error: `{response.status_code}`\n```{response.text[:500]}```")
 
     except Exception as e:
-        await interaction.followup.send(f"💀 Error: {str(e)}")
+        error_msg = str(e)
+        if "timeout" in error_msg.lower():
+            await interaction.followup.send("⏱️ **Timeout!** Target terlalu lambat merespons.\n💡 Coba URL yang lebih pendek atau coba lagi.")
+        elif "connection" in error_msg.lower():
+            await interaction.followup.send("🔌 **Connection Error** - Gagal terhubung ke server")
+        else:
+            logger.error(f"Dump error: {e}")
+            await interaction.followup.send(f"💀 Error: `{error_msg[:200]}`")
+
+# === ALTERNATIF DUMP TANPA SCRAPER API ===
+@bot.tree.command(name="rawdump", description="Dump langsung tanpa proxy (bypass sederhana)")
+@app_commands.describe(url="URL Script")
+@rate(10)
+@noban()
+async def rawdump(interaction: discord.Interaction, url: str):
+    await interaction.response.defer()
+    
+    if not valid_url(url):
+        return await interaction.followup.send("❌ URL tidak valid!")
+    
+    try:
+        session = get_session()
+        headers = get_executor_headers()
+        
+        response = session.get(url, headers=headers, timeout=(5, 30), allow_redirects=True)
+        content = response.text
+        
+        if len(content) < 10:
+            return await interaction.followup.send("❌ Response kosong")
+        
+        file_ext = "lua" if any(x in content[:500] for x in ['local ', 'function ', 'return ', 'game:']) else "txt"
+        file_data = io.BytesIO(content.encode("utf-8"))
+        
+        await interaction.followup.send(
+            content=f"📥 **Raw Dump**\n📦 Size: `{len(content):,} bytes`",
+            file=discord.File(file_data, filename=f"raw_dump.{file_ext}")
+        )
+    except Exception as e:
+        await interaction.followup.send(f"💀 Error: `{str(e)[:200]}`")
 
 @bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
 @app_commands.describe(perintah="Perintah untuk AI",file="Upload file",model="Pilih AI")
@@ -423,9 +514,10 @@ async def ping(i:discord.Interaction):
     await i.response.send_message(f"🏓 Pong! `{round(bot.latency*1000)}ms`")
 
 @bot.tree.command(name="help",description="📚 Panduan")
-async def help(i:discord.Interaction):
+async def help_cmd(i:discord.Interaction):
     e=discord.Embed(title="📚 Bot Help",color=0x2ECC71)
-    e.add_field(name="🔓 /dump",value="Executor Simulation Dump",inline=False)
+    e.add_field(name="🔓 /dump",value="Dump via ScraperAPI (anti-block)",inline=False)
+    e.add_field(name="🔓 /rawdump",value="Dump langsung (tanpa proxy)",inline=False)
     e.add_field(name="🤖 /ai",value="Excel & Tanya Jawab AI",inline=False)
     e.add_field(name="🔧 /testai",value="Test Koneksi AI",inline=False)
     await i.response.send_message(embed=e)
@@ -438,8 +530,8 @@ async def testai(i:discord.Interaction):
     try:
         c=get_groq()
         if c:c.chat.completions.create(messages=[{"role":"user","content":"OK"}],model="llama-3.3-70b-versatile",max_tokens=5);res.append("✅ Groq")
-        else:res.append("❌ Groq")
-    except:res.append("❌ Groq Error")
+        else:res.append("❌ Groq (No Key)")
+    except Exception as e:res.append(f"❌ Groq: {str(e)[:30]}")
     try:
         if call_gemini("OK"):res.append("✅ Gemini")
         else:res.append("❌ Gemini")
