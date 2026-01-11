@@ -14,12 +14,13 @@ KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY")
 KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY")
 KEY_COHERE=os.getenv("COHERE_API_KEY")
 OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
+PREFIX=os.getenv("BOT_PREFIX","!")
 if not DISCORD_TOKEN:
     print("❌ NO TOKEN!")
     exit(1)
 intents=discord.Intents.default()
 intents.message_content=True
-bot=commands.Bot(command_prefix="!",intents=intents)
+bot=commands.Bot(command_prefix=PREFIX,intents=intents)
 UA_LIST=["Roblox/WinInet","Synapse-X/2.0","Sentinel/3.0","Krnl/1.0","KRNL/2.0","Fluxus/1.0","ScriptWare/2.0","Electron/1.0","Hydrogen/1.0","Codex/1.0","Arceus-X/2.0","Delta/1.0","Trigon/3.0","Evon/1.0","JJSploit/7.0","Comet/1.0","Nihon/1.0","Celery/1.0","Vega-X/1.0","Oxygen-U/1.0"]
 _groq=None
 _curl=None
@@ -257,8 +258,7 @@ OR_FREE={
     "gemini":"google/gemini-2.0-flash-exp:free",
     "mistral":"mistralai/mistral-7b-instruct:free",
     "qwen":"qwen/qwen-2-7b-instruct:free",
-    "deepseek":"deepseek/deepseek-r1:free",
-    "phi":"microsoft/phi-3-medium-128k-instruct:free"
+    "deepseek":"deepseek/deepseek-r1:free"
 }
 def call_groq(msgs):
     cl=get_groq()
@@ -281,7 +281,7 @@ def call_openrouter(msgs,model_key="llama"):
             headers={
                 "Authorization":f"Bearer {KEY_OPENROUTER}",
                 "Content-Type":"application/json",
-                "HTTP-Referer":"https://replit.com",
+                "HTTP-Referer":"https://github.com",
                 "X-Title":"ExcelBot"
             },
             json={"model":model_id,"messages":msgs,"temperature":0.2,"max_tokens":8000},
@@ -327,7 +327,7 @@ def call_sambanova(msgs):
         )
         if r.status_code==200:
             return r.json()["choices"][0]["message"]["content"]
-        logger.error(f"SambaNova: HTTP {r.status_code} - {r.text[:100]}")
+        logger.error(f"SambaNova: HTTP {r.status_code}")
         return None
     except Exception as e:
         logger.error(f"SambaNova: {e}")
@@ -362,7 +362,7 @@ def call_cohere(msgs):
         )
         if r.status_code==200:
             return r.json().get("text","")
-        logger.error(f"Cohere: HTTP {r.status_code} - {r.text[:100]}")
+        logger.error(f"Cohere: HTTP {r.status_code}")
         return None
     except Exception as e:
         logger.error(f"Cohere: {e}")
@@ -394,7 +394,6 @@ def ask_ai(prompt,uid=None,model="auto"):
             msgs=[{"role":"system","content":EXCEL_PROMPT}]+history+[{"role":"user","content":prompt}]
     result=None
     used_model="none"
-    logger.info(f"ask_ai: model={model}")
     if model=="groq":
         result=call_groq(msgs)
         used_model="Groq" if result else "none"
@@ -423,18 +422,14 @@ def ask_ai(prompt,uid=None,model="auto"):
             (lambda:call_cohere(msgs),"Cohere"),
             (lambda:call_pollinations(prompt),"Pollinations")
         ]:
-            logger.info(f"Auto: trying {name}...")
             try:
                 result=fn()
                 if result:
                     used_model=name
-                    logger.info(f"Auto: {name} success!")
                     break
-            except Exception as e:
-                logger.error(f"Auto: {name} error - {e}")
+            except:
                 continue
     if not result and model!="auto":
-        logger.info("Fallback to Groq...")
         result=call_groq(msgs)
         if result:
             used_model="Groq(fallback)"
@@ -444,7 +439,6 @@ def ask_ai(prompt,uid=None,model="auto"):
     if uid and result:
         mem.add(uid,"user",prompt)
         mem.add(uid,"assistant",result)
-    logger.info(f"Final: {used_model}")
     return result,used_model
 def fix_json(t):
     t=t.strip()
@@ -519,23 +513,270 @@ def extract_potential_links(html):
             if m:
                 links.add(m)
     return[l for l in links if l.startswith("http")]
+async def process_ai_request(prompt,uid,gid,attachments=None,model="auto"):
+    """Core AI processing - shared between slash, prefix, and mention"""
+    parts=[prompt]
+    if attachments:
+        for att in attachments:
+            fc,ft,meta=await freader.read(att)
+            parts.append(f"\n\n=== FILE: {att.filename} ===\n{fc}")
+    full_prompt='\n'.join(parts)
+    resp,used=ask_ai(full_prompt,uid,model)
+    parsed=parse_ai(resp)
+    action=parsed.get("action","text_only")
+    msg=parsed.get("message","")
+    db.log(uid,gid,"ai",prompt[:500],msg[:500]if msg else"")
+    db.stat("ai",uid)
+    return parsed,resp,used
+async def process_dump_request(url,mode="auto"):
+    """Core dump processing - shared between slash and prefix"""
+    if not valid_url(url):
+        return None,"❌ URL tidak valid!",None,[]
+    curl=get_curl()
+    content=None
+    method_used=""
+    chosen_ua=""
+    attempts=[]
+    browsers=["chrome110","chrome116","chrome120","edge99","safari15_5"]if mode=="aggressive"else["chrome110"]
+    if mode=="stealth":
+        browsers=["safari15_5","chrome110"]
+        time.sleep(random.uniform(0.5,1.5))
+    for browser in browsers:
+        chosen_ua=random.choice(UA_LIST)
+        hdrs=get_roblox_headers()
+        hdrs["User-Agent"]=chosen_ua
+        try:
+            r=curl.get(url,impersonate=browser,headers=hdrs,timeout=20)
+            content=r.text
+            method_used=f"{browser}"
+            attempts.append(f"✅ {browser}")
+            if"<!DOCTYPE"not in content[:200]:
+                break
+            attempts[-1]=f"⚠️ {browser}(HTML)"
+        except Exception as ex:
+            attempts.append(f"❌ {browser}")
+    return content,chosen_ua,method_used,attempts
+# ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
     logger.info(f'🔥 {bot.user}|{len(bot.guilds)} guilds')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching,name="/help"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching,name=f"{PREFIX}help atau @mention"))
     try:
         await bot.tree.sync()
         logger.info("✅ Synced")
     except Exception as e:
         logger.error(f"Sync:{e}")
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    # Check if bot is mentioned
+    if bot.user.mentioned_in(message) and not message.mention_everyone:
+        # Remove mention from content
+        content=message.content.replace(f'<@{bot.user.id}>','').replace(f'<@!{bot.user.id}>','').strip()
+        if content:
+            if db.banned(message.author.id):
+                await message.reply("🚫 Kamu di-blacklist!")
+                return
+            ok,remaining=rl.ok(message.author.id,"mention",5)
+            if not ok:
+                await message.reply(f"⏳ Tunggu **{remaining:.1f}s**")
+                return
+            async with message.channel.typing():
+                try:
+                    attachments=list(message.attachments) if message.attachments else None
+                    parsed,resp,used=await process_ai_request(
+                        content,
+                        message.author.id,
+                        message.guild.id if message.guild else None,
+                        attachments
+                    )
+                    action=parsed.get("action","text_only")
+                    msg=parsed.get("message","")
+                    if action=="generate_excel":
+                        ed=parsed.get("excel_data",{})
+                        fn=ed.get("filename","output.xlsx")
+                        if not fn.endswith('.xlsx'):
+                            fn+='.xlsx'
+                        ef=egen.generate(ed)
+                        e=discord.Embed(title="📊 Excel Created!",color=0x217346)
+                        e.add_field(name="File",value=f"`{fn}`")
+                        e.add_field(name="Model",value=f"`{used}`")
+                        if msg:
+                            e.add_field(name="Info",value=msg[:300],inline=False)
+                        await message.reply(embed=e,file=discord.File(ef,fn))
+                    else:
+                        if not msg:
+                            msg=resp
+                        chunks=split_msg(msg)
+                        await message.reply(f"**🤖 {used}:**\n{chunks[0]}")
+                        for c in chunks[1:]:
+                            await message.channel.send(c)
+                except Exception as ex:
+                    await message.reply(f"❌ Error: `{ex}`")
+        else:
+            await message.reply(f"👋 Hai! Gunakan:\n• **Mention**: @{bot.user.name} <pertanyaan>\n• **Prefix**: `{PREFIX}ai <pertanyaan>`\n• **Slash**: `/ai <pertanyaan>`")
+        return
+    # Process prefix commands
+    await bot.process_commands(message)
 @bot.tree.error
 async def on_error(i,e):
     try:
         await i.response.send_message(f"❌ {str(e)[:100]}",ephemeral=True)
     except:
         pass
+# ============ PREFIX COMMANDS ============
+@bot.command(name="ai",aliases=["ask","chat","tanya"])
+async def prefix_ai(ctx,*,prompt:str=None):
+    """Tanya AI via prefix command"""
+    if db.banned(ctx.author.id):
+        return await ctx.reply("🚫 Kamu di-blacklist!")
+    ok,remaining=rl.ok(ctx.author.id,"ai",10)
+    if not ok:
+        return await ctx.reply(f"⏳ Tunggu **{remaining:.1f}s**")
+    if not prompt and not ctx.message.attachments:
+        return await ctx.reply(f"❌ Gunakan: `{PREFIX}ai <pertanyaan>`")
+    async with ctx.typing():
+        try:
+            attachments=list(ctx.message.attachments) if ctx.message.attachments else None
+            parsed,resp,used=await process_ai_request(
+                prompt or "Analisis file ini",
+                ctx.author.id,
+                ctx.guild.id if ctx.guild else None,
+                attachments
+            )
+            action=parsed.get("action","text_only")
+            msg=parsed.get("message","")
+            if action=="generate_excel":
+                ed=parsed.get("excel_data",{})
+                fn=ed.get("filename","output.xlsx")
+                if not fn.endswith('.xlsx'):
+                    fn+='.xlsx'
+                ef=egen.generate(ed)
+                e=discord.Embed(title="📊 Excel Created!",color=0x217346)
+                e.add_field(name="File",value=f"`{fn}`")
+                e.add_field(name="Model",value=f"`{used}`")
+                if msg:
+                    e.add_field(name="Info",value=msg[:300],inline=False)
+                await ctx.reply(embed=e,file=discord.File(ef,fn))
+            else:
+                if not msg:
+                    msg=resp
+                chunks=split_msg(msg)
+                await ctx.reply(f"**🤖 {used}:**\n{chunks[0]}")
+                for c in chunks[1:]:
+                    await ctx.send(c)
+        except Exception as ex:
+            await ctx.reply(f"❌ Error: `{ex}`")
+@bot.command(name="dump",aliases=["get","download"])
+async def prefix_dump(ctx,url:str=None,mode:str="auto"):
+    """Dump script via prefix command"""
+    if db.banned(ctx.author.id):
+        return await ctx.reply("🚫 Kamu di-blacklist!")
+    ok,remaining=rl.ok(ctx.author.id,"dump",8)
+    if not ok:
+        return await ctx.reply(f"⏳ Tunggu **{remaining:.1f}s**")
+    if not url:
+        return await ctx.reply(f"❌ Gunakan: `{PREFIX}dump <url> [mode]`\nModes: auto, stealth, aggressive, raw")
+    async with ctx.typing():
+        try:
+            content,chosen_ua,method_used,attempts=await process_dump_request(url,mode)
+            if not content:
+                return await ctx.reply("💀 Gagal dump!")
+            ext="lua"
+            status="✅ **BERHASIL!**"
+            color=0x00FF00
+            potential_links=[]
+            if"<!DOCTYPE"in content[:500]:
+                ext="html"
+                color=0xFFFF00
+                potential_links=extract_potential_links(content)
+                status=f"⚠️ **HTML** - {len(potential_links)} link" if potential_links else "❌ **HTML/JS Challenge**"
+            elif content.strip().startswith("{"):
+                ext="json"
+                status="📋 **JSON**"
+            e=discord.Embed(title="🔓 Dump",description=status,color=color)
+            e.add_field(name="Size",value=f"`{len(content):,}b`")
+            e.add_field(name="Type",value=f"`.{ext}`")
+            e.add_field(name="UA",value=f"`{chosen_ua[:15]}...`")
+            if potential_links:
+                e.add_field(name="🔗 Links",value="\n".join([f"`{l[:50]}`"for l in potential_links[:3]]),inline=False)
+            db.stat("dump",ctx.author.id)
+            await ctx.reply(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
+        except Exception as ex:
+            await ctx.reply(f"💀 Error: `{ex}`")
+@bot.command(name="ping")
+async def prefix_ping(ctx):
+    """Check bot status"""
+    e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
+    e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
+    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
+    await ctx.reply(embed=e)
+@bot.command(name="help",aliases=["h","?"])
+async def prefix_help(ctx):
+    """Show help"""
+    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot dengan Prefix, Mention, dan Slash Command",color=0x217346)
+    e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`\n• **Slash**: `/ai pertanyaan`",inline=False)
+    e.add_field(name=f"🤖 {PREFIX}ai <prompt>",value="Tanya AI / Buat Excel",inline=False)
+    e.add_field(name=f"🔓 {PREFIX}dump <url> [mode]",value="Download script (modes: auto/stealth/aggressive/raw)",inline=False)
+    e.add_field(name=f"🧹 {PREFIX}clear",value="Hapus memory chat",inline=False)
+    e.add_field(name=f"📜 {PREFIX}history",value="Lihat history",inline=False)
+    e.add_field(name="📝 Contoh",value=f"```{PREFIX}ai buatkan excel invoice\n{PREFIX}dump https://site.com/script\n@{bot.user.name} apa itu rumus VLOOKUP?```",inline=False)
+    await ctx.reply(embed=e)
+@bot.command(name="clear",aliases=["reset","cls"])
+async def prefix_clear(ctx):
+    """Clear memory"""
+    mem.clear(ctx.author.id)
+    await ctx.reply("🧹 Memory dihapus!")
+@bot.command(name="history",aliases=["hist"])
+async def prefix_history(ctx,limit:int=5):
+    """Show history"""
+    h=db.hist(ctx.author.id,min(limit,10))
+    if not h:
+        return await ctx.reply("📭 History kosong")
+    e=discord.Embed(title="📜 History",color=0x3498DB)
+    for idx,(p,r)in enumerate(h,1):
+        e.add_field(name=f"{idx}. {p[:30]}...",value=f"```{r[:50]}...```",inline=False)
+    await ctx.reply(embed=e)
+@bot.command(name="testai")
+@commands.is_owner()
+async def prefix_testai(ctx):
+    """Test all AI providers"""
+    async with ctx.typing():
+        results=[]
+        test_msgs=[{"role":"user","content":"Say: OK"}]
+        providers=[
+            ("Groq",lambda:call_groq(test_msgs)),
+            ("Cerebras",lambda:call_cerebras(test_msgs)),
+            ("SambaNova",lambda:call_sambanova(test_msgs)),
+            ("Cohere",lambda:call_cohere(test_msgs)),
+            ("OpenRouter",lambda:call_openrouter(test_msgs,"llama")),
+            ("Pollinations",lambda:call_pollinations("Say: OK"))
+        ]
+        for name,fn in providers:
+            try:
+                r=fn()
+                status="✅" if r else "❌"
+                text=r[:40].strip().replace('\n',' ') if r else "Failed"
+                results.append(f"{status} **{name}**: {text}")
+            except:
+                results.append(f"❌ **{name}**: Error")
+        e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
+        await ctx.reply(embed=e)
+@bot.command(name="stats")
+@commands.is_owner()
+async def prefix_stats(ctx):
+    """Show stats"""
+    st=db.get_stats()
+    e=discord.Embed(title="📊 Stats",color=0x3498DB)
+    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
+    e.add_field(name="Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
+    if st:
+        e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
+    await ctx.reply(embed=e)
+# ============ SLASH COMMANDS ============
 @bot.tree.command(name="ping",description="🏓 Cek status bot")
-async def ping(i:discord.Interaction):
+async def slash_ping(i:discord.Interaction):
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
@@ -543,12 +784,11 @@ async def ping(i:discord.Interaction):
     e.add_field(name="AI Keys",value=keys,inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="help",description="📚 Panduan bot")
-async def help_cmd(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot",color=0x217346)
-    e.add_field(name="🔓 /dump <url> [mode]",value="Download script",inline=False)
-    e.add_field(name="🤖 /ai <perintah> [model]",value="Tanya AI / Buat Excel",inline=False)
-    e.add_field(name="🔧 /testai",value="Test semua AI",inline=False)
-    e.add_field(name="🔧 Lainnya",value="`/clear` `/history` `/stats` `/reload`",inline=False)
+async def slash_help(i:discord.Interaction):
+    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot dengan 3 cara interaksi",color=0x217346)
+    e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`\n• **Slash**: `/ai pertanyaan`",inline=False)
+    e.add_field(name="🤖 AI Commands",value=f"`{PREFIX}ai` `/ai` - Tanya AI\n`{PREFIX}dump` `/dump` - Dump script",inline=False)
+    e.add_field(name="🔧 Utilities",value=f"`{PREFIX}clear` `/clear` - Hapus memory\n`{PREFIX}history` - Lihat history",inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="dump",description="🔓 Dump script")
 @app_commands.describe(url="URL script",mode="Mode bypass")
@@ -560,34 +800,10 @@ async def help_cmd(i:discord.Interaction):
 ])
 @rate(8)
 @noban()
-async def dump(i:discord.Interaction,url:str,mode:str="auto"):
+async def slash_dump(i:discord.Interaction,url:str,mode:str="auto"):
     await i.response.defer()
-    if not valid_url(url):
-        return await i.followup.send("❌ URL tidak valid!")
     try:
-        curl=get_curl()
-        content=None
-        method_used=""
-        chosen_ua=""
-        attempts=[]
-        browsers=["chrome110","chrome116","chrome120","edge99","safari15_5"]if mode=="aggressive"else["chrome110"]
-        if mode=="stealth":
-            browsers=["safari15_5","chrome110"]
-            time.sleep(random.uniform(0.5,1.5))
-        for browser in browsers:
-            chosen_ua=random.choice(UA_LIST)
-            hdrs=get_roblox_headers()
-            hdrs["User-Agent"]=chosen_ua
-            try:
-                r=curl.get(url,impersonate=browser,headers=hdrs,timeout=20)
-                content=r.text
-                method_used=f"{browser}"
-                attempts.append(f"✅ {browser}")
-                if"<!DOCTYPE"not in content[:200]:
-                    break
-                attempts[-1]=f"⚠️ {browser}(HTML)"
-            except Exception as ex:
-                attempts.append(f"❌ {browser}")
+        content,chosen_ua,method_used,attempts=await process_dump_request(url,mode)
         if not content:
             return await i.followup.send("💀 Gagal!")
         ext="lua"
@@ -612,31 +828,6 @@ async def dump(i:discord.Interaction,url:str,mode:str="auto"):
         await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
     except Exception as ex:
         await i.followup.send(f"💀 Error: `{ex}`")
-@bot.tree.command(name="testai",description="🔧 Test semua AI")
-@owner()
-async def testai(i:discord.Interaction):
-    await i.response.defer()
-    results=[]
-    test_msgs=[{"role":"user","content":"Say: OK"}]
-    providers=[
-        ("Groq",lambda:call_groq(test_msgs)),
-        ("Cerebras",lambda:call_cerebras(test_msgs)),
-        ("SambaNova",lambda:call_sambanova(test_msgs)),
-        ("Cohere",lambda:call_cohere(test_msgs)),
-        ("OpenRouter",lambda:call_openrouter(test_msgs,"llama")),
-        ("OR-Gemini",lambda:call_openrouter(test_msgs,"gemini")),
-        ("Pollinations",lambda:call_pollinations("Say: OK"))
-    ]
-    for name,fn in providers:
-        try:
-            r=fn()
-            status="✅" if r else "❌"
-            text=r[:40].strip().replace('\n',' ') if r else "Failed"
-            results.append(f"{status} **{name}**: {text}")
-        except Exception as ex:
-            results.append(f"❌ **{name}**: Error")
-    e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
-    await i.followup.send(embed=e)
 @bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
 @app_commands.describe(perintah="Perintah",file="Upload file",model="AI model")
 @app_commands.choices(model=[
@@ -647,25 +838,23 @@ async def testai(i:discord.Interaction):
     app_commands.Choice(name="🔷 Cohere",value="cohere"),
     app_commands.Choice(name="🦙 OR Llama",value="or_llama"),
     app_commands.Choice(name="🔵 OR Gemini",value="or_gemini"),
-    app_commands.Choice(name="🧪 OR DeepSeek",value="or_deepseek"),
     app_commands.Choice(name="🌺 Pollinations",value="pollinations")
 ])
 @rate(10)
 @noban()
-async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None,model:str="auto"):
+async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=None,model:str="auto"):
     await i.response.defer()
     try:
-        parts=[perintah]
-        if file:
-            fc,ft,meta=await freader.read(file)
-            parts.append(f"\n\n=== FILE: {file.filename} ===\n{fc}")
-        prompt='\n'.join(parts)
-        resp,used=ask_ai(prompt,i.user.id,model)
-        parsed=parse_ai(resp)
+        attachments=[file] if file else None
+        parsed,resp,used=await process_ai_request(
+            perintah,
+            i.user.id,
+            i.guild_id,
+            attachments,
+            model
+        )
         action=parsed.get("action","text_only")
         msg=parsed.get("message","")
-        db.log(i.user.id,i.guild_id,"ai",perintah[:500],msg[:500]if msg else"")
-        db.stat("ai",i.user.id)
         if action=="generate_excel":
             ed=parsed.get("excel_data",{})
             fn=ed.get("filename","output.xlsx")
@@ -688,24 +877,38 @@ async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None
             for c in ch[1:]:
                 await i.channel.send(c)
     except Exception as ex:
-        logger.error(f"AI cmd error: {ex}")
         await i.followup.send(f"❌ Error: `{ex}`")
 @bot.tree.command(name="clear",description="🧹 Hapus memory")
-async def clear_cmd(i:discord.Interaction):
+async def slash_clear(i:discord.Interaction):
     mem.clear(i.user.id)
     await i.response.send_message("🧹 Cleared!",ephemeral=True)
-@bot.tree.command(name="history",description="📜 History chat")
-async def history_cmd(i:discord.Interaction,limit:int=5):
-    h=db.hist(i.user.id,min(limit,10))
-    if not h:
-        return await i.response.send_message("📭 Kosong",ephemeral=True)
-    e=discord.Embed(title="📜 History",color=0x3498DB)
-    for idx,(p,r)in enumerate(h,1):
-        e.add_field(name=f"{idx}. {p[:30]}...",value=f"```{r[:50]}...```",inline=False)
-    await i.response.send_message(embed=e,ephemeral=True)
+@bot.tree.command(name="testai",description="🔧 Test semua AI")
+@owner()
+async def slash_testai(i:discord.Interaction):
+    await i.response.defer()
+    results=[]
+    test_msgs=[{"role":"user","content":"Say: OK"}]
+    providers=[
+        ("Groq",lambda:call_groq(test_msgs)),
+        ("Cerebras",lambda:call_cerebras(test_msgs)),
+        ("SambaNova",lambda:call_sambanova(test_msgs)),
+        ("Cohere",lambda:call_cohere(test_msgs)),
+        ("OpenRouter",lambda:call_openrouter(test_msgs,"llama")),
+        ("Pollinations",lambda:call_pollinations("Say: OK"))
+    ]
+    for name,fn in providers:
+        try:
+            r=fn()
+            status="✅" if r else "❌"
+            text=r[:40].strip().replace('\n',' ') if r else "Failed"
+            results.append(f"{status} **{name}**: {text}")
+        except:
+            results.append(f"❌ **{name}**: Error")
+    e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
+    await i.followup.send(embed=e)
 @bot.tree.command(name="stats",description="📊 Stats (Owner)")
 @owner()
-async def stats_cmd(i:discord.Interaction):
+async def slash_stats(i:discord.Interaction):
     st=db.get_stats()
     e=discord.Embed(title="📊 Stats",color=0x3498DB)
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
@@ -713,19 +916,9 @@ async def stats_cmd(i:discord.Interaction):
     if st:
         e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
     await i.response.send_message(embed=e)
-@bot.tree.command(name="blacklist",description="🚫 Ban (Owner)")
-@owner()
-async def bl_cmd(i:discord.Interaction,user:discord.User,reason:str=""):
-    db.ban(user.id,reason,i.user.id)
-    await i.response.send_message(f"🚫 {user} banned")
-@bot.tree.command(name="unblacklist",description="✅ Unban (Owner)")
-@owner()
-async def ubl_cmd(i:discord.Interaction,user:discord.User):
-    db.unban(user.id)
-    await i.response.send_message(f"✅ {user} unbanned")
 @bot.tree.command(name="reload",description="🔄 Sync (Owner)")
 @owner()
-async def reload_cmd(i:discord.Interaction):
+async def slash_reload(i:discord.Interaction):
     await i.response.defer()
     try:
         s=await bot.tree.sync()
@@ -735,6 +928,7 @@ async def reload_cmd(i:discord.Interaction):
 if __name__=="__main__":
     keep_alive()
     print("🚀 Starting...")
+    print(f"📦 Prefix: {PREFIX}")
     print(f"📦 Groq{'✅'if KEY_GROQ else'❌'} Cerebras{'✅'if KEY_CEREBRAS else'❌'} SN{'✅'if KEY_SAMBANOVA else'❌'} Cohere{'✅'if KEY_COHERE else'❌'} OR{'✅'if KEY_OPENROUTER else'❌'}")
     try:
         bot.run(DISCORD_TOKEN,log_handler=None)
