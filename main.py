@@ -18,7 +18,7 @@ if not DISCORD_TOKEN:print("❌ NO TOKEN!");exit(1)
 intents=discord.Intents.default()
 intents.message_content=True
 bot=commands.Bot(command_prefix="!",intents=intents)
-_groq=_openai=_genai=_curl=_requests=_pd=_openpyxl=None
+_groq=_openai=_curl=_requests=_pd=_openpyxl=None
 def get_groq():
     global _groq
     if _groq is None and KEY_GROQ:
@@ -31,13 +31,6 @@ def get_openai():
         from openai import OpenAI
         _openai=OpenAI(api_key=KEY_OPENAI)
     return _openai
-def get_genai():
-    global _genai
-    if _genai is None and KEY_GEMINI:
-        import google.generativeai as genai
-        genai.configure(api_key=KEY_GEMINI)
-        _genai=genai
-    return _genai
 def get_curl():
     global _curl
     if _curl is None:
@@ -197,6 +190,7 @@ Generate Excel: {"action":"generate_excel","message":"info","excel_data":{"sheet
 Jawab saja: {"action":"text_only","message":"jawaban"}
 Bahasa Indonesia.'''
 OR_FREE={"llama":"meta-llama/llama-3.3-70b-instruct:free","gemini":"google/gemini-2.0-flash-exp:free","mistral":"mistralai/mistral-7b-instruct:free","qwen":"qwen/qwen-2-7b-instruct:free"}
+GEMINI_MODELS=["gemini-2.0-flash","gemini-1.5-pro","gemini-pro","gemini-1.0-pro"]
 def ask_ai(prompt,uid=None,model="auto"):
     msgs=[{"role":"system","content":EXCEL_PROMPT}]
     if uid:msgs.extend(mem.get(uid))
@@ -216,12 +210,19 @@ def ask_ai(prompt,uid=None,model="auto"):
             return r.choices[0].message.content,"OpenAI"
         except Exception as e:logger.warning(f"OpenAI:{e}");return None,None
     def try_gemini():
-        g=get_genai()
-        if not g:return None,None
+        if not KEY_GEMINI:return None,None
         try:
-            m=g.GenerativeModel("gemini-1.5-flash")
-            r=m.generate_content(f"{EXCEL_PROMPT}\n\nUser:{prompt}")
-            return r.text,"Gemini"
+            import google.generativeai as genai
+            genai.configure(api_key=KEY_GEMINI)
+            for mn in GEMINI_MODELS:
+                try:
+                    m=genai.GenerativeModel(mn)
+                    r=m.generate_content(f"{EXCEL_PROMPT}\n\nUser:{prompt}")
+                    if r and r.text:return r.text,f"Gemini({mn})"
+                except Exception as e:
+                    if "404" in str(e)or "not found" in str(e).lower():continue
+                    logger.warning(f"Gemini {mn}:{e}");continue
+            return None,None
         except Exception as e:logger.warning(f"Gemini:{e}");return None,None
     def try_or(mk="llama"):
         if not KEY_OPENROUTER:return None,None
@@ -338,24 +339,39 @@ async def dump(i:discord.Interaction,url:str,raw:bool=False):
 async def testai(i:discord.Interaction):
     await i.response.defer()
     results=[];t="Jawab: OK"
+    # Groq
     try:
         cl=get_groq()
         if cl:cl.chat.completions.create(messages=[{"role":"user","content":t}],model="llama-3.3-70b-versatile",max_tokens=10);results.append("✅ **Groq**")
         else:results.append("❌ **Groq**: No Key")
     except Exception as e:results.append(f"❌ **Groq**: `{str(e)[:40]}`")
+    # OpenAI
     try:
         cl=get_openai()
         if cl:cl.chat.completions.create(model="gpt-4o",messages=[{"role":"user","content":t}],max_tokens=10);results.append("✅ **OpenAI**")
         else:results.append("❌ **OpenAI**: No Key")
     except Exception as e:results.append(f"❌ **OpenAI**: `{str(e)[:40]}`")
+    # Gemini - try multiple models
     try:
         if KEY_GEMINI:
-            import google.generativeai as gai
-            gai.configure(api_key=KEY_GEMINI)
-            gai.GenerativeModel("gemini-1.5-flash").generate_content(t)
-            results.append("✅ **Gemini**")
+            import google.generativeai as genai
+            genai.configure(api_key=KEY_GEMINI)
+            found=False
+            for mn in GEMINI_MODELS:
+                try:
+                    genai.GenerativeModel(mn).generate_content(t)
+                    results.append(f"✅ **Gemini** ({mn})")
+                    found=True
+                    break
+                except Exception as e:
+                    if "404" in str(e)or "not found" in str(e).lower():continue
+                    results.append(f"❌ **Gemini** ({mn}): `{str(e)[:30]}`")
+                    found=True
+                    break
+            if not found:results.append("❌ **Gemini**: No valid model found")
         else:results.append("❌ **Gemini**: No Key")
     except Exception as e:results.append(f"❌ **Gemini**: `{str(e)[:40]}`")
+    # OpenRouter
     try:
         if KEY_OPENROUTER:
             req=get_requests()
@@ -364,6 +380,7 @@ async def testai(i:discord.Interaction):
             else:results.append(f"❌ **OpenRouter**: HTTP {r.status_code}")
         else:results.append("❌ **OpenRouter**: No Key")
     except Exception as e:results.append(f"❌ **OpenRouter**: `{str(e)[:40]}`")
+    # Pollinations
     try:
         req=get_requests()
         r=req.get(f"https://text.pollinations.ai/{quote(t)}?model=openai",timeout=30)
