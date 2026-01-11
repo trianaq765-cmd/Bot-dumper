@@ -13,6 +13,8 @@ KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY")
 KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY")
 KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY")
 KEY_COHERE=os.getenv("COHERE_API_KEY")
+KEY_CLAUDE_1=os.getenv("CLAUDE_API_KEY_1")
+KEY_CLAUDE_2=os.getenv("CLAUDE_API_KEY_2")
 OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
 PREFIX=os.getenv("BOT_PREFIX","!")
 if not DISCORD_TOKEN:
@@ -22,6 +24,7 @@ intents=discord.Intents.default()
 intents.message_content=True
 bot=commands.Bot(command_prefix=PREFIX,intents=intents,help_command=None)
 UA_LIST=["Roblox/WinInet","Synapse-X/2.0","Sentinel/3.0","Krnl/1.0","KRNL/2.0","Fluxus/1.0","ScriptWare/2.0","Electron/1.0","Hydrogen/1.0","Codex/1.0","Arceus-X/2.0","Delta/1.0","Trigon/3.0","Evon/1.0","JJSploit/7.0","Comet/1.0","Nihon/1.0","Celery/1.0","Vega-X/1.0","Oxygen-U/1.0"]
+claude_key_index=0
 _groq=None
 _curl=None
 _requests=None
@@ -57,6 +60,15 @@ def get_openpyxl():
         import openpyxl
         _openpyxl=openpyxl
     return _openpyxl
+def get_claude_key():
+    """Rotate between Claude API keys"""
+    global claude_key_index
+    keys=[k for k in[KEY_CLAUDE_1,KEY_CLAUDE_2]if k]
+    if not keys:
+        return None
+    key=keys[claude_key_index%len(keys)]
+    claude_key_index+=1
+    return key
 class Database:
     def __init__(self,path="bot.db"):
         self.conn=sqlite3.connect(path,check_same_thread=False)
@@ -268,10 +280,13 @@ Jika hanya jawab pertanyaan:
 Jawab dalam Bahasa Indonesia. JANGAN tambahkan teks apapun selain JSON.'''
 OR_FREE={
     "llama":"meta-llama/llama-3.3-70b-instruct:free",
-    "gemini":"google/gemini-2.0-flash-exp:free",
-    "mistral":"mistralai/mistral-7b-instruct:free",
-    "qwen":"qwen/qwen-2-7b-instruct:free",
-    "deepseek":"deepseek/deepseek-r1:free"
+    "gemini":"google/gemini-2.5-pro-exp-03-25:free",
+    "gemini2":"google/gemini-2.0-flash-001:free",
+    "mistral":"mistralai/mistral-small-3.1-24b-instruct:free",
+    "qwen":"qwen/qwen3-235b-a22b:free",
+    "deepseek":"deepseek/deepseek-chat-v3-0324:free",
+    "phi":"microsoft/phi-4:free",
+    "llama4":"meta-llama/llama-4-maverick:free"
 }
 MODEL_NAMES={
     "auto":"🚀 Auto",
@@ -279,8 +294,13 @@ MODEL_NAMES={
     "cerebras":"🧠 Cerebras",
     "sambanova":"🦣 SambaNova",
     "cohere":"🔷 Cohere",
-    "or_llama":"🦙 OpenRouter Llama",
-    "or_gemini":"🔵 OpenRouter Gemini",
+    "claude":"🟠 Claude",
+    "or_llama":"🦙 OR Llama",
+    "or_gemini":"🔵 OR Gemini",
+    "or_qwen":"🟣 OR Qwen",
+    "or_deepseek":"🧪 OR DeepSeek",
+    "or_mistral":"🔶 OR Mistral",
+    "or_phi":"🔷 OR Phi-4",
     "pollinations":"🌺 Pollinations"
 }
 def call_groq(msgs):
@@ -298,7 +318,8 @@ def call_openrouter(msgs,model_key="llama"):
         return None
     try:
         req=get_requests()
-        model_id=OR_FREE.get(model_key,"meta-llama/llama-3.3-70b-instruct:free")
+        model_id=OR_FREE.get(model_key,OR_FREE["llama"])
+        logger.info(f"OpenRouter: Trying {model_key} -> {model_id}")
         r=req.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -308,13 +329,19 @@ def call_openrouter(msgs,model_key="llama"):
                 "X-Title":"ExcelBot"
             },
             json={"model":model_id,"messages":msgs,"temperature":0.2,"max_tokens":8000},
-            timeout=60
+            timeout=90
         )
         if r.status_code==200:
             data=r.json()
             if "choices" in data and len(data["choices"])>0:
-                return data["choices"][0]["message"]["content"]
-        logger.error(f"OpenRouter: HTTP {r.status_code}")
+                content=data["choices"][0]["message"]["content"]
+                if content:
+                    logger.info(f"OpenRouter {model_key}: Success")
+                    return content
+        logger.error(f"OpenRouter {model_key}: HTTP {r.status_code} - {r.text[:200]}")
+        if model_key!="llama":
+            logger.info(f"OpenRouter: Fallback to llama...")
+            return call_openrouter(msgs,"llama")
         return None
     except Exception as e:
         logger.error(f"OpenRouter: {e}")
@@ -390,6 +417,55 @@ def call_cohere(msgs):
     except Exception as e:
         logger.error(f"Cohere: {e}")
         return None
+def call_claude(msgs):
+    """Call Claude API with key rotation"""
+    api_key=get_claude_key()
+    if not api_key:
+        logger.info("Claude: No API keys")
+        return None
+    try:
+        req=get_requests()
+        system_msg=""
+        messages=[]
+        for m in msgs:
+            if m["role"]=="system":
+                system_msg=m["content"]
+            else:
+                messages.append({"role":m["role"],"content":m["content"]})
+        payload={
+            "model":"claude-3-haiku-20240307",
+            "max_tokens":4096,
+            "messages":messages
+        }
+        if system_msg:
+            payload["system"]=system_msg
+        r=req.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key":api_key,
+                "Content-Type":"application/json",
+                "anthropic-version":"2023-06-01"
+            },
+            json=payload,
+            timeout=60
+        )
+        if r.status_code==200:
+            data=r.json()
+            if "content" in data and len(data["content"])>0:
+                text=data["content"][0].get("text","")
+                if text:
+                    logger.info("Claude: Success")
+                    return text
+        elif r.status_code==429:
+            logger.warning(f"Claude: Rate limited, trying other key...")
+            other_key=get_claude_key()
+            if other_key and other_key!=api_key:
+                return call_claude(msgs)
+        logger.error(f"Claude: HTTP {r.status_code} - {r.text[:200]}")
+        return None
+    except Exception as e:
+        logger.error(f"Claude: {e}")
+        return None
 def call_pollinations(prompt):
     try:
         req=get_requests()
@@ -419,11 +495,13 @@ def call_model_direct(model,msgs,prompt):
         return call_sambanova(msgs),"SambaNova"
     elif model=="cohere":
         return call_cohere(msgs),"Cohere"
+    elif model=="claude":
+        return call_claude(msgs),"Claude"
     elif model=="pollinations":
         return call_pollinations(prompt),"Pollinations"
     elif model.startswith("or_"):
         mk=model[3:]
-        return call_openrouter(msgs,mk),f"OpenRouter({mk})"
+        return call_openrouter(msgs,mk),f"OR({mk})"
     return None,"none"
 def ask_ai(prompt,uid=None,model=None):
     """Main AI function with persistent model preference"""
@@ -443,27 +521,32 @@ def ask_ai(prompt,uid=None,model=None):
     result=None
     used_model="none"
     if model!="auto":
+        logger.info(f"Direct call to: {model}")
         result,used_model=call_model_direct(model,msgs,prompt)
         if not result:
-            logger.info(f"{model} failed, trying fallback...")
-            for fn,name in [
+            logger.info(f"{model} failed, trying fallbacks...")
+            fallbacks=[
                 (lambda:call_groq(msgs),"Groq"),
                 (lambda:call_cerebras(msgs),"Cerebras"),
+                (lambda:call_claude(msgs),"Claude"),
                 (lambda:call_openrouter(msgs,"llama"),"OpenRouter")
-            ]:
+            ]
+            for fn,name in fallbacks:
                 result=fn()
                 if result:
                     used_model=f"{name}(fallback)"
                     break
     else:
-        for fn,name in [
+        providers=[
             (lambda:call_groq(msgs),"Groq"),
             (lambda:call_cerebras(msgs),"Cerebras"),
+            (lambda:call_claude(msgs),"Claude"),
             (lambda:call_openrouter(msgs,"llama"),"OpenRouter"),
             (lambda:call_sambanova(msgs),"SambaNova"),
             (lambda:call_cohere(msgs),"Cohere"),
             (lambda:call_pollinations(prompt),"Pollinations")
-        ]:
+        ]
+        for fn,name in providers:
             try:
                 result=fn()
                 if result:
@@ -602,7 +685,7 @@ async def process_dump_request(url,mode="auto"):
 @bot.event
 async def on_ready():
     logger.info(f'🔥 {bot.user}|{len(bot.guilds)} guilds')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching,name=f"{PREFIX}help atau @mention"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching,name=f"{PREFIX}help"))
     try:
         await bot.tree.sync()
         logger.info("✅ Synced")
@@ -616,194 +699,144 @@ async def on_message(message):
         content=message.content.replace(f'<@{bot.user.id}>','').replace(f'<@!{bot.user.id}>','').strip()
         if content:
             if db.banned(message.author.id):
-                await message.reply("🚫 Kamu di-blacklist!")
-                return
+                return await message.reply("🚫 Blacklist!")
             ok,remaining=rl.ok(message.author.id,"mention",5)
             if not ok:
-                await message.reply(f"⏳ Tunggu **{remaining:.1f}s**")
-                return
+                return await message.reply(f"⏳ Tunggu **{remaining:.1f}s**")
             async with message.channel.typing():
                 try:
                     attachments=list(message.attachments) if message.attachments else None
                     user_model=db.get_user_model(message.author.id)
                     parsed,resp,used=await process_ai_request(
-                        content,
-                        message.author.id,
+                        content,message.author.id,
                         message.guild.id if message.guild else None,
-                        attachments,
-                        user_model
+                        attachments,user_model
                     )
                     action=parsed.get("action","text_only")
                     msg=parsed.get("message","")
                     if action=="generate_excel":
                         ed=parsed.get("excel_data",{})
                         fn=ed.get("filename","output.xlsx")
-                        if not fn.endswith('.xlsx'):
-                            fn+='.xlsx'
+                        if not fn.endswith('.xlsx'):fn+='.xlsx'
                         ef=egen.generate(ed)
-                        e=discord.Embed(title="📊 Excel Created!",color=0x217346)
+                        e=discord.Embed(title="📊 Excel!",color=0x217346)
                         e.add_field(name="File",value=f"`{fn}`")
                         e.add_field(name="Model",value=f"`{used}`")
-                        if msg:
-                            e.add_field(name="Info",value=msg[:300],inline=False)
                         await message.reply(embed=e,file=discord.File(ef,fn))
                     else:
-                        if not msg:
-                            msg=resp
+                        if not msg:msg=resp
                         chunks=split_msg(msg)
-                        current_model=db.get_user_model(message.author.id)
-                        model_display=MODEL_NAMES.get(current_model,current_model)
-                        await message.reply(f"**🤖 {used}** (default: {model_display}):\n{chunks[0]}")
+                        await message.reply(f"**🤖 {used}:**\n{chunks[0]}")
                         for c in chunks[1:]:
                             await message.channel.send(c)
                 except Exception as ex:
                     await message.reply(f"❌ Error: `{ex}`")
         else:
-            current_model=db.get_user_model(message.author.id)
-            model_display=MODEL_NAMES.get(current_model,current_model)
-            await message.reply(f"👋 Hai! Model kamu: **{model_display}**\n\nKetik pertanyaan setelah mention.\nGanti model: `{PREFIX}model <nama>`")
+            cm=db.get_user_model(message.author.id)
+            await message.reply(f"👋 Model: **{MODEL_NAMES.get(cm,cm)}**\nKetik pertanyaan!")
         return
     await bot.process_commands(message)
 @bot.tree.error
 async def on_error(i,e):
-    try:
-        await i.response.send_message(f"❌ {str(e)[:100]}",ephemeral=True)
-    except:
-        pass
-@bot.command(name="model",aliases=["setmodel","m"])
+    try:await i.response.send_message(f"❌ {str(e)[:100]}",ephemeral=True)
+    except:pass
+@bot.command(name="model",aliases=["m"])
 async def prefix_model(ctx,model:str=None):
-    """Set atau lihat model AI default"""
-    valid_models=["auto","groq","cerebras","sambanova","cohere","or_llama","or_gemini","pollinations"]
+    valid=list(MODEL_NAMES.keys())
     if not model:
-        current=db.get_user_model(ctx.author.id)
-        model_display=MODEL_NAMES.get(current,current)
-        e=discord.Embed(title="🤖 Model AI Kamu",color=0x3498DB)
-        e.add_field(name="Current",value=f"**{model_display}**",inline=False)
-        e.add_field(name="Available",value="\n".join([f"`{k}` - {v}" for k,v in MODEL_NAMES.items()]),inline=False)
-        e.add_field(name="Usage",value=f"`{PREFIX}model <nama>`\nContoh: `{PREFIX}model cerebras`",inline=False)
+        cm=db.get_user_model(ctx.author.id)
+        e=discord.Embed(title="🤖 Model",color=0x3498DB)
+        e.add_field(name="Current",value=f"**{MODEL_NAMES.get(cm,cm)}**",inline=False)
+        e.add_field(name="Available",value="\n".join([f"`{k}` {v}"for k,v in MODEL_NAMES.items()]),inline=False)
         return await ctx.reply(embed=e)
     model=model.lower()
-    if model not in valid_models:
-        return await ctx.reply(f"❌ Model tidak valid!\nPilihan: `{', '.join(valid_models)}`")
+    if model not in valid:
+        return await ctx.reply(f"❌ Invalid! Use: `{', '.join(valid)}`")
     db.set_user_model(ctx.author.id,model)
-    model_display=MODEL_NAMES.get(model,model)
-    await ctx.reply(f"✅ Model default diubah ke: **{model_display}**\n\nSemua chat berikutnya akan menggunakan model ini.")
-@bot.command(name="ai",aliases=["ask","chat","tanya"])
+    await ctx.reply(f"✅ Model: **{MODEL_NAMES.get(model,model)}**")
+@bot.command(name="ai",aliases=["ask","chat"])
 async def prefix_ai(ctx,*,prompt:str=None):
-    if db.banned(ctx.author.id):
-        return await ctx.reply("🚫 Kamu di-blacklist!")
-    ok,remaining=rl.ok(ctx.author.id,"ai",10)
-    if not ok:
-        return await ctx.reply(f"⏳ Tunggu **{remaining:.1f}s**")
+    if db.banned(ctx.author.id):return await ctx.reply("🚫 Blacklist!")
+    ok,r=rl.ok(ctx.author.id,"ai",10)
+    if not ok:return await ctx.reply(f"⏳ Tunggu **{r:.1f}s**")
     if not prompt and not ctx.message.attachments:
-        return await ctx.reply(f"❌ Gunakan: `{PREFIX}ai <pertanyaan>`")
+        return await ctx.reply(f"❌ `{PREFIX}ai <prompt>`")
     async with ctx.typing():
         try:
-            attachments=list(ctx.message.attachments) if ctx.message.attachments else None
-            user_model=db.get_user_model(ctx.author.id)
-            parsed,resp,used=await process_ai_request(
-                prompt or "Analisis file ini",
-                ctx.author.id,
-                ctx.guild.id if ctx.guild else None,
-                attachments,
-                user_model
-            )
+            att=list(ctx.message.attachments)if ctx.message.attachments else None
+            um=db.get_user_model(ctx.author.id)
+            parsed,resp,used=await process_ai_request(prompt or"Analisis",ctx.author.id,ctx.guild.id if ctx.guild else None,att,um)
             action=parsed.get("action","text_only")
             msg=parsed.get("message","")
             if action=="generate_excel":
                 ed=parsed.get("excel_data",{})
                 fn=ed.get("filename","output.xlsx")
-                if not fn.endswith('.xlsx'):
-                    fn+='.xlsx'
+                if not fn.endswith('.xlsx'):fn+='.xlsx'
                 ef=egen.generate(ed)
-                e=discord.Embed(title="📊 Excel Created!",color=0x217346)
+                e=discord.Embed(title="📊 Excel!",color=0x217346)
                 e.add_field(name="File",value=f"`{fn}`")
                 e.add_field(name="Model",value=f"`{used}`")
-                if msg:
-                    e.add_field(name="Info",value=msg[:300],inline=False)
                 await ctx.reply(embed=e,file=discord.File(ef,fn))
             else:
-                if not msg:
-                    msg=resp
+                if not msg:msg=resp
                 chunks=split_msg(msg)
                 await ctx.reply(f"**🤖 {used}:**\n{chunks[0]}")
-                for c in chunks[1:]:
-                    await ctx.send(c)
+                for c in chunks[1:]:await ctx.send(c)
         except Exception as ex:
             await ctx.reply(f"❌ Error: `{ex}`")
-@bot.command(name="dump",aliases=["get","download"])
+@bot.command(name="dump")
 async def prefix_dump(ctx,url:str=None,mode:str="auto"):
-    if db.banned(ctx.author.id):
-        return await ctx.reply("🚫 Kamu di-blacklist!")
-    ok,remaining=rl.ok(ctx.author.id,"dump",8)
-    if not ok:
-        return await ctx.reply(f"⏳ Tunggu **{remaining:.1f}s**")
-    if not url:
-        return await ctx.reply(f"❌ Gunakan: `{PREFIX}dump <url> [mode]`")
+    if db.banned(ctx.author.id):return await ctx.reply("🚫")
+    ok,r=rl.ok(ctx.author.id,"dump",8)
+    if not ok:return await ctx.reply(f"⏳ {r:.1f}s")
+    if not url:return await ctx.reply(f"❌ `{PREFIX}dump <url>`")
     async with ctx.typing():
         try:
-            content,chosen_ua,method_used,attempts=await process_dump_request(url,mode)
-            if not content:
-                return await ctx.reply("💀 Gagal dump!")
-            ext="lua"
-            status="✅ **BERHASIL!**"
-            color=0x00FF00
-            potential_links=[]
+            content,ua,_,_=await process_dump_request(url,mode)
+            if not content:return await ctx.reply("💀 Gagal!")
+            ext="lua";status="✅";color=0x00FF00;links=[]
             if"<!DOCTYPE"in content[:500]:
-                ext="html"
-                color=0xFFFF00
-                potential_links=extract_potential_links(content)
-                status=f"⚠️ **HTML** - {len(potential_links)} link" if potential_links else "❌ **HTML/JS Challenge**"
-            elif content.strip().startswith("{"):
-                ext="json"
-                status="📋 **JSON**"
+                ext="html";color=0xFFFF00;links=extract_potential_links(content)
+                status=f"⚠️ HTML - {len(links)} link"if links else"❌ Challenge"
+            elif content.strip().startswith("{"):ext="json";status="📋 JSON"
             e=discord.Embed(title="🔓 Dump",description=status,color=color)
             e.add_field(name="Size",value=f"`{len(content):,}b`")
             e.add_field(name="Type",value=f"`.{ext}`")
-            e.add_field(name="UA",value=f"`{chosen_ua[:15]}...`")
-            if potential_links:
-                e.add_field(name="🔗 Links",value="\n".join([f"`{l[:50]}`"for l in potential_links[:3]]),inline=False)
+            if links:e.add_field(name="Links",value="\n".join([f"`{l[:40]}`"for l in links[:3]]),inline=False)
             db.stat("dump",ctx.author.id)
             await ctx.reply(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
-        except Exception as ex:
-            await ctx.reply(f"💀 Error: `{ex}`")
+        except Exception as ex:await ctx.reply(f"💀 {ex}")
 @bot.command(name="ping")
 async def prefix_ping(ctx):
-    current_model=db.get_user_model(ctx.author.id)
-    model_display=MODEL_NAMES.get(current_model,current_model)
+    cm=db.get_user_model(ctx.author.id)
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
-    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="Your Model",value=f"`{model_display}`")
-    chat_count=len(mem.get(ctx.author.id))
-    e.add_field(name="Chat History",value=f"`{chat_count} messages`")
+    e.add_field(name="Model",value=f"`{MODEL_NAMES.get(cm,cm)}`")
+    e.add_field(name="Memory",value=f"`{len(mem.get(ctx.author.id))} msgs`")
+    claude_count=len([k for k in[KEY_CLAUDE_1,KEY_CLAUDE_2]if k])
+    e.add_field(name="Claude Keys",value=f"`{claude_count}`")
     await ctx.reply(embed=e)
 @bot.command(name="help",aliases=["h"])
 async def prefix_help(ctx):
-    current_model=db.get_user_model(ctx.author.id)
-    model_display=MODEL_NAMES.get(current_model,current_model)
-    e=discord.Embed(title="📚 Excel AI Bot",description=f"Model kamu: **{model_display}**",color=0x217346)
-    e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`",inline=False)
-    e.add_field(name="🤖 AI Commands",value=f"`{PREFIX}ai <prompt>` - Tanya AI\n`{PREFIX}model <nama>` - Ganti model default\n`{PREFIX}clear` - Hapus chat history",inline=False)
-    e.add_field(name="🔓 Dump",value=f"`{PREFIX}dump <url>` - Download script",inline=False)
-    e.add_field(name="📋 Models",value="`auto` `groq` `cerebras` `sambanova` `cohere` `or_llama` `or_gemini` `pollinations`",inline=False)
+    cm=db.get_user_model(ctx.author.id)
+    e=discord.Embed(title="📚 Excel AI Bot",description=f"Model: **{MODEL_NAMES.get(cm,cm)}**",color=0x217346)
+    e.add_field(name="💬 Usage",value=f"• @{bot.user.name} <prompt>\n• `{PREFIX}ai <prompt>`",inline=False)
+    e.add_field(name="🤖 AI",value=f"`{PREFIX}ai` `{PREFIX}model` `{PREFIX}clear`",inline=False)
+    e.add_field(name="🔓 Dump",value=f"`{PREFIX}dump <url>`",inline=False)
+    e.add_field(name="📋 Models",value="`auto` `groq` `cerebras` `claude` `sambanova` `cohere`\n`or_llama` `or_gemini` `or_qwen` `or_deepseek` `or_mistral`",inline=False)
     await ctx.reply(embed=e)
-@bot.command(name="clear",aliases=["reset"])
+@bot.command(name="clear")
 async def prefix_clear(ctx):
     mem.clear(ctx.author.id)
-    await ctx.reply("🧹 Chat history dihapus! Percakapan dimulai dari awal.")
-@bot.command(name="history",aliases=["hist"])
-async def prefix_history(ctx,limit:int=5):
-    h=mem.get_last_n(ctx.author.id,min(limit,10))
-    if not h:
-        return await ctx.reply("📭 Chat history kosong")
-    e=discord.Embed(title="📜 Chat History (Memory)",color=0x3498DB)
-    for idx,msg in enumerate(h,1):
-        role="👤 You" if msg["role"]=="user" else "🤖 AI"
-        content=msg["content"][:100]+"..." if len(msg["content"])>100 else msg["content"]
-        e.add_field(name=f"{idx}. {role}",value=f"```{content}```",inline=False)
-    current_model=db.get_user_model(ctx.author.id)
-    e.set_footer(text=f"Model: {MODEL_NAMES.get(current_model,current_model)} | {len(h)} messages in memory")
+    await ctx.reply("🧹 Memory cleared!")
+@bot.command(name="history")
+async def prefix_history(ctx):
+    h=mem.get_last_n(ctx.author.id,5)
+    if not h:return await ctx.reply("📭 Empty")
+    e=discord.Embed(title="📜 Memory",color=0x3498DB)
+    for i,m in enumerate(h,1):
+        role="👤"if m["role"]=="user"else"🤖"
+        e.add_field(name=f"{i}. {role}",value=f"```{m['content'][:80]}...```",inline=False)
     await ctx.reply(embed=e)
 @bot.command(name="testai")
 @commands.is_owner()
@@ -814,20 +847,26 @@ async def prefix_testai(ctx):
         providers=[
             ("Groq",lambda:call_groq(test_msgs)),
             ("Cerebras",lambda:call_cerebras(test_msgs)),
+            ("Claude",lambda:call_claude(test_msgs)),
             ("SambaNova",lambda:call_sambanova(test_msgs)),
             ("Cohere",lambda:call_cohere(test_msgs)),
-            ("OpenRouter",lambda:call_openrouter(test_msgs,"llama")),
+            ("OR-Llama",lambda:call_openrouter(test_msgs,"llama")),
+            ("OR-Gemini",lambda:call_openrouter(test_msgs,"gemini")),
+            ("OR-Qwen",lambda:call_openrouter(test_msgs,"qwen")),
+            ("OR-DeepSeek",lambda:call_openrouter(test_msgs,"deepseek")),
             ("Pollinations",lambda:call_pollinations("Say: OK"))
         ]
         for name,fn in providers:
             try:
                 r=fn()
-                status="✅" if r else "❌"
-                text=r[:40].strip().replace('\n',' ') if r else "Failed"
-                results.append(f"{status} **{name}**: {text}")
-            except:
-                results.append(f"❌ **{name}**: Error")
+                s="✅"if r else"❌"
+                t=r[:30].strip().replace('\n',' ')if r else"Failed"
+                results.append(f"{s} **{name}**: {t}")
+            except Exception as ex:
+                results.append(f"❌ **{name}**: {str(ex)[:20]}")
         e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
+        claude_keys=len([k for k in[KEY_CLAUDE_1,KEY_CLAUDE_2]if k])
+        e.set_footer(text=f"Claude keys: {claude_keys}")
         await ctx.reply(embed=e)
 @bot.command(name="stats")
 @commands.is_owner()
@@ -836,158 +875,108 @@ async def prefix_stats(ctx):
     e=discord.Embed(title="📊 Stats",color=0x3498DB)
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
     e.add_field(name="Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
-    if st:
-        e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
+    if st:e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
     await ctx.reply(embed=e)
-@bot.tree.command(name="ping",description="🏓 Cek status")
-async def slash_ping(i:discord.Interaction):
-    current_model=db.get_user_model(i.user.id)
-    model_display=MODEL_NAMES.get(current_model,current_model)
-    e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
-    e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
-    e.add_field(name="Your Model",value=f"`{model_display}`")
-    await i.response.send_message(embed=e)
-@bot.tree.command(name="model",description="🤖 Set model AI default")
-@app_commands.describe(model="Pilih model")
+@bot.tree.command(name="model",description="🤖 Set AI model")
+@app_commands.describe(model="Model")
 @app_commands.choices(model=[
-    app_commands.Choice(name="🚀 Auto (Recommended)",value="auto"),
-    app_commands.Choice(name="⚡ Groq (Fast)",value="groq"),
-    app_commands.Choice(name="🧠 Cerebras (Fastest)",value="cerebras"),
+    app_commands.Choice(name="🚀 Auto",value="auto"),
+    app_commands.Choice(name="⚡ Groq",value="groq"),
+    app_commands.Choice(name="🧠 Cerebras",value="cerebras"),
+    app_commands.Choice(name="🟠 Claude",value="claude"),
     app_commands.Choice(name="🦣 SambaNova",value="sambanova"),
     app_commands.Choice(name="🔷 Cohere",value="cohere"),
-    app_commands.Choice(name="🦙 OpenRouter Llama",value="or_llama"),
-    app_commands.Choice(name="🔵 OpenRouter Gemini",value="or_gemini"),
+    app_commands.Choice(name="🦙 OR Llama",value="or_llama"),
+    app_commands.Choice(name="🔵 OR Gemini",value="or_gemini"),
+    app_commands.Choice(name="🟣 OR Qwen",value="or_qwen"),
+    app_commands.Choice(name="🧪 OR DeepSeek",value="or_deepseek"),
     app_commands.Choice(name="🌺 Pollinations",value="pollinations")
 ])
 async def slash_model(i:discord.Interaction,model:str=None):
     if model:
         db.set_user_model(i.user.id,model)
-        model_display=MODEL_NAMES.get(model,model)
-        await i.response.send_message(f"✅ Model default: **{model_display}**\n\nSemua chat berikutnya menggunakan model ini.",ephemeral=True)
+        await i.response.send_message(f"✅ Model: **{MODEL_NAMES.get(model,model)}**",ephemeral=True)
     else:
-        current=db.get_user_model(i.user.id)
-        model_display=MODEL_NAMES.get(current,current)
-        await i.response.send_message(f"🤖 Model kamu: **{model_display}**",ephemeral=True)
-@bot.tree.command(name="help",description="📚 Panduan")
-async def slash_help(i:discord.Interaction):
-    current_model=db.get_user_model(i.user.id)
-    model_display=MODEL_NAMES.get(current_model,current_model)
-    e=discord.Embed(title="📚 Excel AI Bot",description=f"Model: **{model_display}**",color=0x217346)
-    e.add_field(name="💬 Cara Pakai",value=f"• Mention: @{bot.user.name} pertanyaan\n• Prefix: `{PREFIX}ai pertanyaan`",inline=False)
-    e.add_field(name="🔧 Commands",value=f"`/model` - Ganti model\n`/clear` - Hapus history\n`/ai` - Tanya AI",inline=False)
-    await i.response.send_message(embed=e)
-@bot.tree.command(name="dump",description="🔓 Dump script")
-@app_commands.describe(url="URL",mode="Mode")
-@app_commands.choices(mode=[
-    app_commands.Choice(name="Auto",value="auto"),
-    app_commands.Choice(name="Stealth",value="stealth"),
-    app_commands.Choice(name="Aggressive",value="aggressive")
-])
-@rate(8)
-@noban()
-async def slash_dump(i:discord.Interaction,url:str,mode:str="auto"):
-    await i.response.defer()
-    try:
-        content,chosen_ua,method_used,attempts=await process_dump_request(url,mode)
-        if not content:
-            return await i.followup.send("💀 Gagal!")
-        ext="lua"
-        status="✅ **BERHASIL!**"
-        color=0x00FF00
-        potential_links=[]
-        if"<!DOCTYPE"in content[:500]:
-            ext="html"
-            color=0xFFFF00
-            potential_links=extract_potential_links(content)
-            status=f"⚠️ **HTML** - {len(potential_links)} link" if potential_links else "❌ **HTML/JS Challenge**"
-        elif content.strip().startswith("{"):
-            ext="json"
-            status="📋 **JSON**"
-        e=discord.Embed(title="🔓 Dump",description=status,color=color)
-        e.add_field(name="Size",value=f"`{len(content):,}b`")
-        e.add_field(name="Type",value=f"`.{ext}`")
-        if potential_links:
-            e.add_field(name="🔗 Links",value="\n".join([f"`{l[:50]}`"for l in potential_links[:3]]),inline=False)
-        db.stat("dump",i.user.id)
-        await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
-    except Exception as ex:
-        await i.followup.send(f"💀 Error: `{ex}`")
-@bot.tree.command(name="ai",description="🤖 Tanya AI")
-@app_commands.describe(perintah="Perintah",file="File")
+        cm=db.get_user_model(i.user.id)
+        await i.response.send_message(f"🤖 Model: **{MODEL_NAMES.get(cm,cm)}**",ephemeral=True)
+@bot.tree.command(name="ai",description="🤖 Ask AI")
+@app_commands.describe(prompt="Prompt",file="File")
 @rate(10)
 @noban()
-async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=None):
+async def slash_ai(i:discord.Interaction,prompt:str,file:discord.Attachment=None):
     await i.response.defer()
     try:
-        attachments=[file] if file else None
-        user_model=db.get_user_model(i.user.id)
-        parsed,resp,used=await process_ai_request(perintah,i.user.id,i.guild_id,attachments,user_model)
+        att=[file]if file else None
+        um=db.get_user_model(i.user.id)
+        parsed,resp,used=await process_ai_request(prompt,i.user.id,i.guild_id,att,um)
         action=parsed.get("action","text_only")
         msg=parsed.get("message","")
         if action=="generate_excel":
             ed=parsed.get("excel_data",{})
             fn=ed.get("filename","output.xlsx")
-            if not fn.endswith('.xlsx'):
-                fn+='.xlsx'
+            if not fn.endswith('.xlsx'):fn+='.xlsx'
             ef=egen.generate(ed)
-            e=discord.Embed(title="📊 Excel Created!",color=0x217346)
-            e.add_field(name="File",value=f"`{fn}`")
+            e=discord.Embed(title="📊 Excel!",color=0x217346)
             e.add_field(name="Model",value=f"`{used}`")
             await i.followup.send(embed=e,file=discord.File(ef,fn))
         else:
-            if not msg:
-                msg=resp
-            e=discord.Embed(title="🤖 AI",color=0x5865F2)
-            e.set_footer(text=f"Model: {used}")
+            if not msg:msg=resp
             ch=split_msg(msg)
-            await i.followup.send(embed=e,content=ch[0])
-            for c in ch[1:]:
-                await i.channel.send(c)
+            await i.followup.send(f"**🤖 {used}:**\n{ch[0]}")
+            for c in ch[1:]:await i.channel.send(c)
     except Exception as ex:
-        await i.followup.send(f"❌ Error: `{ex}`")
-@bot.tree.command(name="clear",description="🧹 Hapus chat history")
+        await i.followup.send(f"❌ {ex}")
+@bot.tree.command(name="dump",description="🔓 Dump")
+@app_commands.describe(url="URL",mode="Mode")
+@app_commands.choices(mode=[app_commands.Choice(name="Auto",value="auto"),app_commands.Choice(name="Stealth",value="stealth"),app_commands.Choice(name="Aggressive",value="aggressive")])
+@rate(8)
+@noban()
+async def slash_dump(i:discord.Interaction,url:str,mode:str="auto"):
+    await i.response.defer()
+    try:
+        content,ua,_,_=await process_dump_request(url,mode)
+        if not content:return await i.followup.send("💀 Failed!")
+        ext="lua";status="✅";color=0x00FF00
+        if"<!DOCTYPE"in content[:500]:ext="html";color=0xFFFF00;status="⚠️ HTML"
+        elif content.strip().startswith("{"):ext="json";status="📋"
+        e=discord.Embed(title="🔓 Dump",description=status,color=color)
+        e.add_field(name="Size",value=f"`{len(content):,}b`")
+        db.stat("dump",i.user.id)
+        await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
+    except Exception as ex:await i.followup.send(f"💀 {ex}")
+@bot.tree.command(name="clear",description="🧹 Clear memory")
 async def slash_clear(i:discord.Interaction):
     mem.clear(i.user.id)
-    await i.response.send_message("🧹 Chat history dihapus!",ephemeral=True)
+    await i.response.send_message("🧹 Cleared!",ephemeral=True)
+@bot.tree.command(name="ping",description="🏓 Ping")
+async def slash_ping(i:discord.Interaction):
+    await i.response.send_message(f"🏓 `{round(bot.latency*1000)}ms`")
+@bot.tree.command(name="help",description="📚 Help")
+async def slash_help(i:discord.Interaction):
+    await i.response.send_message(f"📚 Use `{PREFIX}help` for full guide!")
 @bot.tree.command(name="testai",description="🔧 Test AI")
 @owner()
 async def slash_testai(i:discord.Interaction):
     await i.response.defer()
     results=[]
-    test_msgs=[{"role":"user","content":"Say: OK"}]
-    providers=[
-        ("Groq",lambda:call_groq(test_msgs)),
-        ("Cerebras",lambda:call_cerebras(test_msgs)),
-        ("SambaNova",lambda:call_sambanova(test_msgs)),
-        ("Cohere",lambda:call_cohere(test_msgs)),
-        ("OpenRouter",lambda:call_openrouter(test_msgs,"llama")),
-        ("Pollinations",lambda:call_pollinations("Say: OK"))
-    ]
-    for name,fn in providers:
+    test=[{"role":"user","content":"Say: OK"}]
+    for n,f in[("Groq",lambda:call_groq(test)),("Cerebras",lambda:call_cerebras(test)),("Claude",lambda:call_claude(test)),("OR-Llama",lambda:call_openrouter(test,"llama")),("OR-Gemini",lambda:call_openrouter(test,"gemini"))]:
         try:
-            r=fn()
-            status="✅" if r else "❌"
-            text=r[:40].strip().replace('\n',' ') if r else "Failed"
-            results.append(f"{status} **{name}**: {text}")
-        except:
-            results.append(f"❌ **{name}**: Error")
-    e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
-    await i.followup.send(embed=e)
+            r=f()
+            results.append(f"{'✅'if r else'❌'} **{n}**: {r[:25] if r else'Fail'}")
+        except:results.append(f"❌ **{n}**: Error")
+    await i.followup.send(embed=discord.Embed(title="🔧 Test",description="\n".join(results),color=0x3498DB))
 @bot.tree.command(name="reload",description="🔄 Sync")
 @owner()
 async def slash_reload(i:discord.Interaction):
     await i.response.defer()
-    try:
-        s=await bot.tree.sync()
-        await i.followup.send(f"✅ {len(s)} synced")
-    except Exception as e:
-        await i.followup.send(f"❌ {e}")
+    try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)}")
+    except Exception as e:await i.followup.send(f"❌ {e}")
 if __name__=="__main__":
     keep_alive()
     print("🚀 Starting...")
     print(f"📦 Prefix: {PREFIX}")
-    print(f"📦 Groq{'✅'if KEY_GROQ else'❌'} Cerebras{'✅'if KEY_CEREBRAS else'❌'} SN{'✅'if KEY_SAMBANOVA else'❌'} Cohere{'✅'if KEY_COHERE else'❌'} OR{'✅'if KEY_OPENROUTER else'❌'}")
-    try:
-        bot.run(DISCORD_TOKEN,log_handler=None)
-    except Exception as e:
-        print(f"❌ {e}")
+    claude_count=len([k for k in[KEY_CLAUDE_1,KEY_CLAUDE_2]if k])
+    print(f"📦 Groq{'✅'if KEY_GROQ else'❌'} Cerebras{'✅'if KEY_CEREBRAS else'❌'} Claude({claude_count}) OR{'✅'if KEY_OPENROUTER else'❌'}")
+    try:bot.run(DISCORD_TOKEN,log_handler=None)
+    except Exception as e:print(f"❌ {e}")
