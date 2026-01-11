@@ -159,45 +159,64 @@ class ExcelGen:
         sheets=data.get("sheets",[])
         if not sheets:sheets=[{"name":"Sheet1","headers":data.get("headers",[]),"data":data.get("data",[])}]
         for sh in sheets:
-            ws=wb.create_sheet(title=sh.get("name","Sheet1")[:31])
+            ws=wb.create_sheet(title=str(sh.get("name","Sheet1"))[:31])
             headers=sh.get("headers",[]);rows=sh.get("data",[]);formulas=sh.get("formulas",{});styling=sh.get("styling",{})
-            hfill=PatternFill(start_color=styling.get("header_color","4472C4"),end_color=styling.get("header_color","4472C4"),fill_type="solid")
-            hfont=Font(bold=True,color=styling.get("header_font_color","FFFFFF"))
+            hc=styling.get("header_color","4472C4")
+            hfc=styling.get("header_font_color","FFFFFF")
+            hfill=PatternFill(start_color=hc,end_color=hc,fill_type="solid")
+            hfont=Font(bold=True,color=hfc)
             border=Border(left=Side(style='thin'),right=Side(style='thin'),top=Side(style='thin'),bottom=Side(style='thin'))
             for ci,h in enumerate(headers,1):
-                c=ws.cell(row=1,column=ci,value=h);c.font=hfont;c.fill=hfill;c.border=border;c.alignment=Alignment(horizontal='center')
+                c=ws.cell(row=1,column=ci,value=str(h));c.font=hfont;c.fill=hfill;c.border=border;c.alignment=Alignment(horizontal='center')
             for ri,row in enumerate(rows,2):
+                if not isinstance(row,list):row=[row]
                 for ci,val in enumerate(row,1):
                     c=ws.cell(row=ri,column=ci,value=val);c.border=border
                     cl=get_column_letter(ci)
-                    if"number_format"in styling and cl in styling["number_format"]:c.number_format=styling["number_format"][cl]
+                    nf=styling.get("number_format",{})
+                    if isinstance(nf,dict)and cl in nf:c.number_format=nf[cl]
             for ref,f in formulas.items():
                 try:ws[ref]=f;ws[ref].border=border
                 except:pass
             summary=sh.get("summary",{})
             if summary and rows:
                 lr=len(rows)+1;sr=lr+1
-                for cl,f in summary.get("formulas",{}).items():
-                    af=f.replace("{last}",str(lr))
-                    try:ws[f"{cl}{sr}"]=af;ws[f"{cl}{sr}"].font=Font(bold=True);ws[f"{cl}{sr}"].border=border
-                    except:pass
+                sf=summary.get("formulas",{})
+                if isinstance(sf,dict):
+                    for cl,f in sf.items():
+                        af=str(f).replace("{last}",str(lr))
+                        try:ws[f"{cl}{sr}"]=af;ws[f"{cl}{sr}"].font=Font(bold=True);ws[f"{cl}{sr}"].border=border
+                        except:pass
             for ci in range(1,len(headers)+1):
                 cl=get_column_letter(ci)
-                ml=max(len(str(headers[ci-1]))if ci<=len(headers)else 0,max((len(str(r[ci-1]))if ci<=len(r)else 0 for r in rows),default=0))
+                ml=len(str(headers[ci-1]))if ci<=len(headers)else 8
+                for r in rows:
+                    if isinstance(r,list)and ci<=len(r):ml=max(ml,len(str(r[ci-1])))
                 ws.column_dimensions[cl].width=min(max(ml+2,8),50)
             ws.freeze_panes='A2'
         out=io.BytesIO();wb.save(out);out.seek(0)
         return out
 egen=ExcelGen()
-EXCEL_PROMPT='''Kamu adalah Excel Expert AI. Tugas:
-1. Pahami request user tentang Excel
-2. Jika diminta GENERATE Excel, return JSON:
-{"action":"generate_excel","message":"penjelasan","excel_data":{"sheets":[{"name":"Sheet1","headers":["A","B"],"data":[["x",1],["y",2]],"formulas":{"C2":"=A2+B2"},"styling":{"header_color":"4472C4","number_format":{"B":"#,##0"}},"summary":{"formulas":{"B":"=SUM(B2:B{last})"}}}],"filename":"output.xlsx"}}
-3. Jika hanya JAWAB tanpa file:
-{"action":"text_only","message":"penjelasan..."}
-4. ANALISIS file: deteksi error, beri solusi, return fixed data jika perlu
-PENTING: Return VALID JSON. Rumus Excel harus benar. Jawab Bahasa Indonesia.
-Rumus: SUM,AVERAGE,COUNT,IF,VLOOKUP,HLOOKUP,INDEX,MATCH,SUMIF,COUNTIF,LEFT,RIGHT,MID,LEN,TRIM,TEXT,DATE,TODAY,NOW,PMT,FV,PV,NPV,IRR,ROUND,MAX,MIN,IFERROR,CONCATENATE,dll.'''
+EXCEL_PROMPT='''PENTING: Kamu HARUS mengembalikan HANYA JSON yang valid. Jangan ada teks sebelum atau sesudah JSON. Jangan ada penjelasan tambahan di luar JSON.
+
+Kamu adalah Excel Expert AI.
+
+JIKA user minta BUAT/GENERATE file Excel, kembalikan JSON ini:
+{"action":"generate_excel","message":"deskripsi singkat","excel_data":{"sheets":[{"name":"Sheet1","headers":["Kolom1","Kolom2","Kolom3"],"data":[["a",1,2],["b",3,4]],"formulas":{"D2":"=B2+C2","D3":"=B3+C3"},"styling":{"header_color":"4472C4","header_font_color":"FFFFFF","number_format":{"B":"#,##0","C":"#,##0"}},"summary":{"formulas":{"B":"=SUM(B2:B{last})","C":"=SUM(C2:C{last})"}}}],"filename":"output.xlsx"}}
+
+JIKA user minta ANALISIS atau PERBAIKI file, kembalikan JSON dengan data yang sudah diperbaiki dalam format yang sama.
+
+JIKA user hanya BERTANYA (tidak perlu file), kembalikan:
+{"action":"text_only","message":"jawaban lengkap di sini"}
+
+ATURAN KETAT:
+1. HANYA kembalikan JSON, tidak ada teks lain
+2. Pastikan JSON VALID (gunakan koma dengan benar, tutup semua kurung)
+3. Untuk angka, gunakan number bukan string (contoh: 15000000 bukan "15000000")
+4. Rumus Excel harus syntax yang benar
+5. Jawab dalam Bahasa Indonesia
+
+RUMUS YANG TERSEDIA: SUM, AVERAGE, COUNT, MAX, MIN, IF, VLOOKUP, HLOOKUP, INDEX, MATCH, SUMIF, COUNTIF, SUMIFS, COUNTIFS, LEFT, RIGHT, MID, LEN, TRIM, CONCATENATE, TEXT, DATE, TODAY, NOW, YEAR, MONTH, DAY, PMT, FV, PV, NPV, IRR, ROUND, ROUNDUP, ROUNDDOWN, ABS, IFERROR, AND, OR, NOT, dll.'''
 def ask_ai(prompt,uid=None,use_mem=True):
     msgs=[{"role":"system","content":EXCEL_PROMPT}]
     if use_mem and uid:msgs.extend(mem.get(uid))
@@ -205,7 +224,7 @@ def ask_ai(prompt,uid=None,use_mem=True):
     cl=get_groq()
     if cl:
         try:
-            r=cl.chat.completions.create(messages=msgs,model="llama-3.3-70b-versatile",temperature=0.7,max_tokens=8000)
+            r=cl.chat.completions.create(messages=msgs,model="llama-3.3-70b-versatile",temperature=0.3,max_tokens=8000)
             resp=r.choices[0].message.content
             if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",resp)
             return resp,"groq"
@@ -213,7 +232,7 @@ def ask_ai(prompt,uid=None,use_mem=True):
     cl=get_openai()
     if cl:
         try:
-            r=cl.chat.completions.create(model="gpt-4o",messages=msgs,temperature=0.7,max_tokens=8000)
+            r=cl.chat.completions.create(model="gpt-4o",messages=msgs,temperature=0.3,max_tokens=8000)
             resp=r.choices[0].message.content
             if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",resp)
             return resp,"openai"
@@ -229,20 +248,40 @@ def ask_ai(prompt,uid=None,use_mem=True):
         except Exception as e:logger.warning(f"Gemini:{e}")
     try:
         req=get_requests()
-        r=req.get(f"https://text.pollinations.ai/{quote(EXCEL_PROMPT[:300]+' '+prompt)}?model=openai",timeout=60)
+        r=req.get(f"https://text.pollinations.ai/{quote(prompt[:500])}?model=openai&system={quote(EXCEL_PROMPT[:500])}",timeout=60)
         if r.ok and len(r.text)>10:
             if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",r.text)
             return r.text,"pollinations"
     except:pass
-    return '{"action":"text_only","message":"❌ AI tidak tersedia."}',"none"
+    return '{"action":"text_only","message":"❌ AI tidak tersedia. Coba lagi nanti."}',"none"
+def fix_json(text):
+    text=text.strip()
+    text=re.sub(r',\s*}','}',text)
+    text=re.sub(r',\s*]',']',text)
+    text=re.sub(r'"\s*\.\s*"','","',text)
+    text=re.sub(r"'\s*,\s*'","','",text)
+    text=text.replace("'",'"')
+    ob=text.count('{');cb=text.count('}')
+    if ob>cb:text+='}'*(ob-cb)
+    osb=text.count('[');csb=text.count(']')
+    if osb>csb:text+=']'*(osb-csb)
+    return text
 def parse_ai(resp):
+    resp=resp.strip()
+    if resp.startswith('```'):
+        m=re.search(r'```(?:json)?\s*([\s\S]*?)\s*```',resp)
+        if m:resp=m.group(1).strip()
     try:return json.loads(resp)
     except:pass
     try:
-        m=re.search(r'```json\s*(.*?)\s*```',resp,re.DOTALL)
-        if m:return json.loads(m.group(1))
-        m=re.search(r'\{.*\}',resp,re.DOTALL)
-        if m:return json.loads(m.group(0))
+        m=re.search(r'(\{[\s\S]*\})',resp)
+        if m:
+            jt=m.group(1)
+            try:return json.loads(jt)
+            except:
+                jt=fix_json(jt)
+                try:return json.loads(jt)
+                except:pass
     except:pass
     return{"action":"text_only","message":resp}
 def split_msg(t,lim=1900):
@@ -272,18 +311,19 @@ async def ping(i:discord.Interaction):
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="AI",value=f"G{'✅'if KEY_GROQ else'❌'}O{'✅'if KEY_OPENAI else'❌'}M{'✅'if KEY_GEMINI else'❌'}")
+    e.add_field(name="AI",value=f"G{'✅'if KEY_GROQ else'❌'} O{'✅'if KEY_OPENAI else'❌'} M{'✅'if KEY_GEMINI else'❌'}")
     await i.response.send_message(embed=e)
 @bot.tree.command(name="help",description="📚 Panduan bot")
 async def help_cmd(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot",description="Bot untuk Excel & Script",color=0x217346)
-    e.add_field(name="🔓 /dump <url>",value="Download script",inline=False)
-    e.add_field(name="🤖 /ai <perintah> [file]",value="Tanya AI, buat Excel, analisis file\nContoh:\n• /ai Buatkan invoice PT ABC\n• /ai [upload.xlsx] Cek dan perbaiki\n• /ai Rumus hitung diskon",inline=False)
-    e.add_field(name="🔧 Lainnya",value="`/clear` Hapus memory | `/history` Lihat history",inline=False)
+    e=discord.Embed(title="📚 Excel AI Bot",description="Bot AI untuk Excel & Script",color=0x217346)
+    e.add_field(name="🔓 /dump <url>",value="Download script dari URL",inline=False)
+    e.add_field(name="🤖 /ai <perintah> [file]",value="Interaksi dengan AI:\n• Buat Excel baru\n• Analisis & perbaiki file\n• Tanya rumus Excel\n• Convert JSON/CSV ke Excel",inline=False)
+    e.add_field(name="📝 Contoh",value="```/ai Buatkan invoice PT ABC\n/ai [upload.xlsx] Cek dan perbaiki\n/ai [upload.json] Convert ke Excel\n/ai Rumus hitung diskon bertingkat```",inline=False)
+    e.add_field(name="🔧 Lainnya",value="`/clear` Hapus memory\n`/history` Lihat history",inline=False)
     e.set_footer(text="📎 Support: xlsx, csv, json, js, txt, lua, py")
     await i.response.send_message(embed=e)
 @bot.tree.command(name="dump",description="🔓 Download script dari URL")
-@app_commands.describe(url="URL script",raw="Mode raw")
+@app_commands.describe(url="URL script",raw="Mode raw tanpa proxy")
 @rate(10)
 @noban()
 async def dump(i:discord.Interaction,url:str,raw:bool=False):
@@ -296,14 +336,14 @@ async def dump(i:discord.Interaction,url:str,raw:bool=False):
         ext="lua"
         if"<!DOCTYPE"in c[:500]:ext="html"
         elif c.strip().startswith(("{","[")):ext="json"
-        e=discord.Embed(title=f"{'✅'if ext=='lua'else'⚠️'} Dump",color=0x00FF00 if ext=="lua"else 0xFFFF00)
-        e.add_field(name="Size",value=f"`{len(c):,}B`")
-        e.add_field(name="Type",value=f"`.{ext}`")
-        e.add_field(name="Via",value=m)
+        e=discord.Embed(title=f"{'✅'if ext=='lua'else'⚠️'} Dump Complete",color=0x00FF00 if ext=="lua"else 0xFFFF00)
+        e.add_field(name="📦 Size",value=f"`{len(c):,} bytes`")
+        e.add_field(name="📄 Type",value=f"`.{ext}`")
+        e.add_field(name="🔧 Via",value=m)
         db.stat("dump",i.user.id)
         await i.followup.send(embed=e,file=discord.File(io.BytesIO(c.encode()),f"dump.{ext}"))
-    except Exception as ex:await i.followup.send(f"💀 {str(ex)[:200]}")
-@bot.tree.command(name="ai",description="🤖 Tanya AI tentang Excel")
+    except Exception as ex:await i.followup.send(f"💀 Error: `{str(ex)[:200]}`")
+@bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
 @app_commands.describe(perintah="Perintah untuk AI",file="Upload file (xlsx/csv/json/js/txt)")
 @rate(10)
 @noban()
@@ -313,7 +353,7 @@ async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None
         parts=[perintah]
         if file:
             fc,ft,meta=await freader.read(file)
-            parts.append(f"\n=== FILE: {file.filename} ({ft}) ===\n{json.dumps(meta)}\n{fc}")
+            parts.append(f"\n\n=== FILE UPLOAD: {file.filename} ===\nType: {ft}\nMeta: {json.dumps(meta,ensure_ascii=False)}\n\nContent:\n{fc}")
         prompt='\n'.join(parts)
         resp,model=ask_ai(prompt,i.user.id)
         parsed=parse_ai(resp)
@@ -324,69 +364,75 @@ async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None
         if action=="generate_excel":
             ed=parsed.get("excel_data",{})
             fn=ed.get("filename","output.xlsx")
+            if not fn.endswith('.xlsx'):fn+='.xlsx'
             try:
                 ef=egen.generate(ed)
                 e=discord.Embed(title="📊 Excel Created!",color=0x217346)
-                e.add_field(name="File",value=f"`{fn}`")
-                e.add_field(name="AI",value=f"`{model}`")
-                if msg:e.add_field(name="Info",value=msg[:500],inline=False)
+                e.add_field(name="📄 File",value=f"`{fn}`",inline=True)
+                e.add_field(name="🤖 AI",value=f"`{model}`",inline=True)
+                sheets=ed.get("sheets",[])
+                if sheets:
+                    sinfo=", ".join([s.get("name","Sheet")for s in sheets[:3]])
+                    e.add_field(name="📑 Sheets",value=f"`{sinfo}`",inline=True)
+                if msg:e.add_field(name="💬 Info",value=msg[:500],inline=False)
                 await i.followup.send(embed=e,file=discord.File(ef,fn))
             except Exception as ex:
-                logger.error(f"Excel gen:{ex}")
-                ch=split_msg(f"⚠️ Excel error: {ex}\n\n{msg}")
-                await i.followup.send(ch[0])
-                for c in ch[1:]:await i.channel.send(c)
+                logger.error(f"Excel gen error:{ex}")
+                await i.followup.send(f"⚠️ Gagal generate Excel: `{str(ex)[:100]}`\n\nResponse AI:\n```json\n{resp[:1500]}```")
         else:
+            if not msg:msg=resp
             e=discord.Embed(title="🤖 AI Response",color=0x5865F2)
             e.set_footer(text=f"Model: {model}")
             ch=split_msg(msg)
             await i.followup.send(embed=e,content=ch[0])
             for c in ch[1:]:await i.channel.send(c)
     except Exception as ex:
-        logger.error(f"AI cmd:{ex}")
-        await i.followup.send(f"❌ Error: {str(ex)[:200]}")
-@bot.tree.command(name="clear",description="🧹 Hapus memory")
+        logger.error(f"AI cmd error:{ex}")
+        await i.followup.send(f"❌ Error: `{str(ex)[:200]}`")
+@bot.tree.command(name="clear",description="🧹 Hapus memory chat")
 async def clear_cmd(i:discord.Interaction):
     mem.clear(i.user.id)
     await i.response.send_message("🧹 Memory dihapus!",ephemeral=True)
-@bot.tree.command(name="history",description="📜 Lihat history")
-@app_commands.describe(limit="Jumlah (max 10)")
+@bot.tree.command(name="history",description="📜 Lihat history chat")
+@app_commands.describe(limit="Jumlah history (max 10)")
 async def history_cmd(i:discord.Interaction,limit:int=5):
     h=db.hist(i.user.id,min(limit,10))
-    if not h:return await i.response.send_message("📭 Kosong.",ephemeral=True)
-    e=discord.Embed(title="📜 History",color=0x3498DB)
-    for idx,(p,r)in enumerate(h,1):e.add_field(name=f"{idx}. {p[:40]}...",value=f"```{r[:80]}...```",inline=False)
+    if not h:return await i.response.send_message("📭 History kosong.",ephemeral=True)
+    e=discord.Embed(title="📜 Chat History",color=0x3498DB)
+    for idx,(p,r)in enumerate(h,1):e.add_field(name=f"{idx}. {p[:40]}{'...'if len(p)>40 else''}",value=f"```{r[:80]}{'...'if len(r)>80 else''}```",inline=False)
     await i.response.send_message(embed=e,ephemeral=True)
-@bot.tree.command(name="stats",description="📊 Stats (Owner)")
+@bot.tree.command(name="stats",description="📊 Statistik bot (Owner)")
 @owner()
 async def stats_cmd(i:discord.Interaction):
     st=db.get_stats()
-    e=discord.Embed(title="📊 Stats",color=0x3498DB)
-    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    if st:e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:10]]),inline=False)
+    e=discord.Embed(title="📊 Bot Statistics",color=0x3498DB)
+    e.add_field(name="🌐 Servers",value=f"`{len(bot.guilds)}`")
+    e.add_field(name="👥 Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
+    if st:e.add_field(name="📈 Commands",value="\n".join([f"`{c}`: {n}x"for c,n in st[:10]]),inline=False)
     await i.response.send_message(embed=e)
-@bot.tree.command(name="blacklist",description="🚫 Ban (Owner)")
+@bot.tree.command(name="blacklist",description="🚫 Blacklist user (Owner)")
 @owner()
-@app_commands.describe(user="User",reason="Alasan")
-async def bl_cmd(i:discord.Interaction,user:discord.User,reason:str=""):
+@app_commands.describe(user="User target",reason="Alasan")
+async def bl_cmd(i:discord.Interaction,user:discord.User,reason:str="No reason"):
     db.ban(user.id,reason,i.user.id)
-    await i.response.send_message(f"🚫 {user} banned")
-@bot.tree.command(name="unblacklist",description="✅ Unban (Owner)")
+    await i.response.send_message(f"🚫 **{user}** telah di-blacklist: {reason}")
+@bot.tree.command(name="unblacklist",description="✅ Unblacklist user (Owner)")
 @owner()
-@app_commands.describe(user="User")
+@app_commands.describe(user="User target")
 async def ubl_cmd(i:discord.Interaction,user:discord.User):
     db.unban(user.id)
-    await i.response.send_message(f"✅ {user} unbanned")
-@bot.tree.command(name="reload",description="🔄 Sync (Owner)")
+    await i.response.send_message(f"✅ **{user}** telah di-unblacklist")
+@bot.tree.command(name="reload",description="🔄 Sync commands (Owner)")
 @owner()
 async def reload_cmd(i:discord.Interaction):
     await i.response.defer()
-    try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)} synced!")
-    except Exception as e:await i.followup.send(f"❌ {e}")
+    try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)} commands synced!")
+    except Exception as e:await i.followup.send(f"❌ Error: {e}")
 if __name__=="__main__":
     keep_alive()
     time.sleep(1)
-    print(f"🚀 Starting|G{'✅'if KEY_GROQ else'❌'}O{'✅'if KEY_OPENAI else'❌'}M{'✅'if KEY_GEMINI else'❌'}")
+    print(f"🚀 Starting Excel AI Bot...")
+    print(f"📦 AI: Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'}")
     try:bot.run(DISCORD_TOKEN,log_handler=None)
-    except discord.LoginFailure:print("❌ Invalid Token!")
-    except Exception as e:print(f"❌ {e}")
+    except discord.LoginFailure:print("❌ Invalid Discord Token!")
+    except Exception as e:print(f"❌ Error: {e}")
