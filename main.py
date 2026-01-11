@@ -343,10 +343,23 @@ async def reload_cmd(i:discord.Interaction):
 async def setai(i:discord.Interaction,priority:str):
     await i.response.send_message(f"⚙️ AI Priority: `{priority}`\n(Feature placeholder)",ephemeral=True)
 
-if __name__=="__main__":
+# Ganti bagian terakhir
+if __name__ == "__main__":
+    import os
+    
+    # Start web server FIRST
     keep_alive()
+    
+    # Tunggu sebentar biar server ready
+    import time
+    time.sleep(2)
+    
     logger.info("🚀 Starting...")
-    logger.info(f"📦 Groq:{'✅'if KEY_GROQ else'❌'} OpenAI:{'✅'if KEY_OPENAI else'❌'} Gemini:{'✅'if KEY_GEMINI else'❌'} Scraper:{'✅'if SCRAPER_KEY else'❌'}")
-    try:bot.run(DISCORD_TOKEN,log_handler=None)
-    except discord.LoginFailure:logger.critical("❌ Invalid token!")
-    except Exception as e:logger.critical(f"❌ {e}")
+    logger.info(f"📦 Groq:{'✅' if KEY_GROQ else '❌'} OpenAI:{'✅' if KEY_OPENAI else '❌'} Gemini:{'✅' if KEY_GEMINI else '❌'}")
+    
+    try:
+        bot.run(DISCORD_TOKEN, log_handler=None)
+    except discord.LoginFailure:
+        logger.critical("❌ Invalid token!")
+    except Exception as e:
+        logger.critical(f"❌ {e}")
