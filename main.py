@@ -1,151 +1,167 @@
 import discord
 import os
 import io
-import re
 import random
+import requests
 from discord import app_commands
 from discord.ext import commands
-from curl_cffi import requests
+from curl_cffi import requests as curl_requests # Untuk download cepat
+from groq import Groq
+import google.generativeai as genai
 from keep_alive import keep_alive
 
+# Setup Bot
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# List User Agent untuk Download
-UA_LIST = ["Roblox/WinInet", "Delta Android/2.0", "Synapse-X/2.0"]
+# === AMBIL API KEY DARI RENDER ===
+SCRAPER_KEY = os.getenv("SCRAPER_API_KEY")
+KEY_GROQ = os.getenv("GROQ_API_KEY")
+KEY_GEMINI = os.getenv("GEMINI_API_KEY")
+
+# ==============================================================================
+# 🧠 SISTEM MULTI-AI (Groq -> Gemini -> Pollinations)
+# ==============================================================================
+def ask_ai_universal(prompt, system_prompt="Kamu adalah ahli coding Lua Roblox. Jawab singkat dan jelas."):
+    
+    # 1. PRIORITY 1: GROQ (Llama 3) - Paling Cepat
+    if KEY_GROQ:
+        try:
+            client = Groq(api_key=KEY_GROQ)
+            chat = client.chat.completions.create(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+                model="llama3-8b-8192",
+            )
+            return f"⚡ **[Groq]**\n{chat.choices[0].message.content}"
+        except:
+            pass # Lanjut ke Gemini jika error
+
+    # 2. PRIORITY 2: GOOGLE GEMINI - Paling Pintar
+    if KEY_GEMINI:
+        try:
+            genai.configure(api_key=KEY_GEMINI)
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(f"{system_prompt}\n\n{prompt}")
+            return f"🧠 **[Gemini]**\n{response.text}"
+        except:
+            pass # Lanjut ke Pollinations jika error
+
+    # 3. PRIORITY 3: POLLINATIONS (Tanpa API Key - Darurat)
+    try:
+        url_poly = f"https://text.pollinations.ai/{system_prompt} {prompt}?model=openai"
+        response = requests.get(url_poly, timeout=30)
+        if response.status_code == 200:
+            return f"🌺 **[Pollinations]**\n{response.text}"
+    except:
+        pass
+
+    return "❌ **Semua AI sibuk/down.** Coba lagi nanti."
+
+def split_message(text, limit=1900):
+    return [text[i:i+limit] for i in range(0, len(text), limit)]
+
+# ==============================================================================
+# 🛡️ SISTEM DUMPER (ScraperAPI + Header Spoofing)
+# ==============================================================================
+def get_executor_headers():
+    # Meniru Executor Roblox agar tidak dikasih HTML oleh Luarmor
+    fake_place_id = random.choice(["2753915549", "155615604", "4442272183"])
+    return {
+        "User-Agent": "Roblox/WinInet",
+        "Roblox-Place-Id": fake_place_id,
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive"
+    }
 
 @bot.event
 async def on_ready():
     print(f'🔥 Bot Siap: {bot.user}')
-    await bot.tree.sync()
-
-# ==========================================
-# 🧠 OTAK SCANNER (MENGGANTIKAN FUNGSI LUA)
-# ==========================================
-def analyze_script_content(content):
-    report = {
-        "key_systems": [],
-        "webhooks": [],
-        "loadstrings": [],
-        "potential_urls": [],
-        "is_obfuscated": False
-    }
-
-    # 1. Cek Obfuscation (Luraph/IronBrew)
-    if "Luraph" in content or "\\x4c\\x75\\x72\\x61" in content or "IronBrew" in content:
-        report["is_obfuscated"] = True
-
-    # 2. Cari URL (Regex Powerful)
-    # Ini menggantikan fungsi "Memory Scan" di Lua
-    regex_url = r'https?://[^\s"\'<>`]+'
-    all_links = re.findall(regex_url, content)
-
-    for link in all_links:
-        # Bersihkan link dari karakter sisa
-        link = link.rstrip(";,)}")
-        
-        # Kategori: Key System (Work.ink / Linkvertise / Pastebin)
-        if any(x in link for x in ["work.ink", "linkvertise", "loot-link", "link-hub", "pastebin"]):
-            if link not in report["key_systems"]:
-                report["key_systems"].append(link)
-        
-        # Kategori: Webhook (Pencuri Akun)
-        elif "discord.com/api/webhooks" in link:
-            report["webhooks"].append(link)
-        
-        # Kategori: External Loader
-        elif "raw.githubusercontent" in link or "script" in link.lower() or "loader" in link.lower():
-            if link not in report["loadstrings"]:
-                report["loadstrings"].append(link)
-        
-        # Sisanya masuk ke potensial
-        elif "roblox.com" not in link and len(link) < 150:
-            if link not in report["potential_urls"]:
-                report["potential_urls"].append(link)
-
-    return report
-
-# ==========================================
-# COMMAND: /scan
-# ==========================================
-@bot.tree.command(name="scan", description="Scan script untuk mencari Key System, Webhook, & URL tersembunyi")
-@app_commands.describe(url="URL Script (Raw)")
-async def scan(interaction: discord.Interaction, url: str):
-    await interaction.response.defer()
-
     try:
-        # 1. Download Script (Meniru Executor)
-        headers = {"User-Agent": random.choice(UA_LIST)}
-        response = requests.get(url, impersonate="chrome110", headers=headers, timeout=15)
-
-        if response.status_code != 200:
-            return await interaction.followup.send(f"❌ Gagal download. Status: {response.status_code}")
-
-        content = response.text
-        if len(content) > 2000000: # Limit 2MB biar bot ga crash
-            return await interaction.followup.send("⚠️ Script terlalu besar untuk discan!")
-
-        # 2. Analisa Script
-        data = analyze_script_content(content)
-
-        # 3. Buat Laporan (Embed)
-        embed = discord.Embed(title="🔍 Hasil Scan Script", color=discord.Color.yellow())
-        embed.add_field(name="Target", value=f"`{url}`", inline=False)
-        
-        # Tampilkan Key Systems (Work.ink, dll)
-        if data["key_systems"]:
-            links_text = "\n".join([f"• `{x}`" for x in data["key_systems"][:5]]) # Max 5 link
-            embed.add_field(name="🔑 Key Systems Ditemukan", value=links_text, inline=False)
-        else:
-            embed.add_field(name="🔑 Key Systems", value="Tidak ditemukan (Mungkin diobfuscate)", inline=False)
-
-        # Tampilkan Loadstrings
-        if data["loadstrings"]:
-            load_text = "\n".join([f"• `{x}`" for x in data["loadstrings"][:5]])
-            embed.add_field(name="📥 External Loaders", value=load_text, inline=False)
-
-        # Warning Webhook
-        if data["webhooks"]:
-            embed.add_field(name="🚨 WEBHOOK DETECTED", value=f"⚠️ Ditemukan {len(data['webhooks'])} Webhook Discord! (Potensi Logger)", inline=False)
-            embed.color = discord.Color.red()
-
-        # Status Obfuscation
-        if data["is_obfuscated"]:
-            embed.set_footer(text="⚠️ Script ini Ter-Obfuscate (Luraph/Lainnya). Hasil scan mungkin tidak lengkap.")
-        else:
-            embed.set_footer(text="✅ Script Open Source (Raw). Hasil scan akurat.")
-
-        # Kirim File Hasil Lengkap
-        result_text = f"--- SCAN REPORT FOR: {url} ---\n\n"
-        result_text += f"[KEY SYSTEMS]\n" + "\n".join(data["key_systems"]) + "\n\n"
-        result_text += f"[WEBHOOKS]\n" + "\n".join(data["webhooks"]) + "\n\n"
-        result_text += f"[ALL URLS FOUND]\n" + "\n".join(data["potential_urls"]) + "\n" + "\n".join(data["loadstrings"])
-
-        file_data = io.BytesIO(result_text.encode("utf-8"))
-        
-        await interaction.followup.send(embed=embed, file=discord.File(file_data, filename="Scan_Result.txt"))
-
+        await bot.tree.sync()
+        print("✅ Slash Commands Synced")
     except Exception as e:
-        await interaction.followup.send(f"💀 Error: {str(e)}")
+        print(e)
 
-# ==========================================
-# COMMAND: /dump (Tetap Ada)
-# ==========================================
-@bot.tree.command(name="dump", description="Download script file saja")
+# 1. COMMAND DUMP
+@bot.tree.command(name="dump", description="Ambil script dari Junkie/Luarmor/Pastebin")
+@app_commands.describe(url="URL Script")
 async def dump(interaction: discord.Interaction, url: str):
     await interaction.response.defer()
-    try:
-        response = requests.get(url, impersonate="chrome110", headers={"User-Agent": "Roblox/WinInet"})
-        if response.status_code == 200:
-            file = io.BytesIO(response.content)
-            await interaction.followup.send(f"✅ Dumped!", file=discord.File(file, filename="Script.lua"))
-        else:
-            await interaction.followup.send("❌ Gagal.")
-    except:
-        await interaction.followup.send("❌ Error.")
 
+    if not SCRAPER_KEY:
+        return await interaction.followup.send("❌ **Error:** API Key Scraper belum disetting!")
+
+    try:
+        # Gunakan ScraperAPI dengan Residential IP
+        payload = {
+            'api_key': SCRAPER_KEY,
+            'url': url,
+            'keep_headers': 'true', # Jangan hapus header Roblox kita
+        }
+
+        response = requests.get(
+            'http://api.scraperapi.com', 
+            params=payload, 
+            headers=get_executor_headers(), # Header Executor
+            timeout=60
+        )
+
+        if response.status_code == 200:
+            content = response.text
+            
+            # Cek apakah dapat HTML (Gagal) atau Script (Sukses)
+            file_ext = "lua"
+            msg = "✅ **Dump Berhasil!**"
+            
+            if "<!DOCTYPE html>" in content or "<html" in content[:100]:
+                file_ext = "html"
+                msg = "⚠️ **Peringatan:** Target mendeteksi bot dan mengirim HTML."
+
+            file_data = io.BytesIO(content.encode("utf-8"))
+            
+            await interaction.followup.send(
+                content=f"{msg}\n📦 Size: `{len(content)} bytes`",
+                file=discord.File(file_data, filename=f"Dumped.{file_ext}")
+            )
+        else:
+            await interaction.followup.send(f"❌ Gagal: `{response.status_code}`")
+
+    except Exception as e:
+        await interaction.followup.send(f"💀 Error: `{str(e)}`")
+
+# 2. COMMAND TANYA AI
+@bot.tree.command(name="tanya", description="Tanya AI tentang coding")
+async def tanya(interaction: discord.Interaction, pertanyaan: str):
+    await interaction.response.defer()
+    jawaban = ask_ai_universal(pertanyaan)
+    
+    chunks = split_message(jawaban)
+    await interaction.followup.send(f"🤖 **Q:** {pertanyaan}\n\n{chunks[0]}")
+    for c in chunks[1:]: await interaction.channel.send(c)
+
+# 3. COMMAND EXPLAIN (DUMP + AI)
+@bot.tree.command(name="explain", description="AI akan membaca script dari URL dan menjelaskannya")
+async def explain(interaction: discord.Interaction, url: str):
+    await interaction.response.defer()
+    
+    try:
+        # Download cepat pakai curl_cffi (tanpa proxy mahal)
+        res = curl_requests.get(url, impersonate="chrome110", timeout=10)
+        script_content = res.text[:6000] # Ambil 6000 karakter pertama
+        
+        prompt = f"Analisa script Lua Roblox ini. Apa kegunaannya? Apakah aman?:\n\n{script_content}"
+        jawaban = ask_ai_universal(prompt, system_prompt="Kamu adalah Security Analyst.")
+        
+        chunks = split_message(jawaban)
+        await interaction.followup.send(f"🔍 **Analisa:** `{url}`\n\n{chunks[0]}")
+        for c in chunks[1:]: await interaction.channel.send(c)
+        
+    except Exception as e:
+        await interaction.followup.send(f"❌ Gagal analisa: `{str(e)}`")
+
+# Start Server & Bot
 keep_alive()
 try:
     bot.run(os.getenv("DISCORD_TOKEN"))
 except:
-    print("Token Invalid")
+    print("❌ Token Discord Salah!")
