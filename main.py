@@ -20,7 +20,7 @@ if not DISCORD_TOKEN:
     exit(1)
 intents=discord.Intents.default()
 intents.message_content=True
-bot=commands.Bot(command_prefix=PREFIX,intents=intents)
+bot=commands.Bot(command_prefix=PREFIX,intents=intents,help_command=None)
 UA_LIST=["Roblox/WinInet","Synapse-X/2.0","Sentinel/3.0","Krnl/1.0","KRNL/2.0","Fluxus/1.0","ScriptWare/2.0","Electron/1.0","Hydrogen/1.0","Codex/1.0","Arceus-X/2.0","Delta/1.0","Trigon/3.0","Evon/1.0","JJSploit/7.0","Comet/1.0","Nihon/1.0","Celery/1.0","Vega-X/1.0","Oxygen-U/1.0"]
 _groq=None
 _curl=None
@@ -514,7 +514,6 @@ def extract_potential_links(html):
                 links.add(m)
     return[l for l in links if l.startswith("http")]
 async def process_ai_request(prompt,uid,gid,attachments=None,model="auto"):
-    """Core AI processing - shared between slash, prefix, and mention"""
     parts=[prompt]
     if attachments:
         for att in attachments:
@@ -529,7 +528,6 @@ async def process_ai_request(prompt,uid,gid,attachments=None,model="auto"):
     db.stat("ai",uid)
     return parsed,resp,used
 async def process_dump_request(url,mode="auto"):
-    """Core dump processing - shared between slash and prefix"""
     if not valid_url(url):
         return None,"❌ URL tidak valid!",None,[]
     curl=get_curl()
@@ -556,7 +554,6 @@ async def process_dump_request(url,mode="auto"):
         except Exception as ex:
             attempts.append(f"❌ {browser}")
     return content,chosen_ua,method_used,attempts
-# ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
     logger.info(f'🔥 {bot.user}|{len(bot.guilds)} guilds')
@@ -570,9 +567,7 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
-    # Check if bot is mentioned
     if bot.user.mentioned_in(message) and not message.mention_everyone:
-        # Remove mention from content
         content=message.content.replace(f'<@{bot.user.id}>','').replace(f'<@!{bot.user.id}>','').strip()
         if content:
             if db.banned(message.author.id):
@@ -615,9 +610,8 @@ async def on_message(message):
                 except Exception as ex:
                     await message.reply(f"❌ Error: `{ex}`")
         else:
-            await message.reply(f"👋 Hai! Gunakan:\n• **Mention**: @{bot.user.name} <pertanyaan>\n• **Prefix**: `{PREFIX}ai <pertanyaan>`\n• **Slash**: `/ai <pertanyaan>`")
+            await message.reply(f"👋 Hai! Ketik pertanyaan setelah mention saya.\nContoh: `@{bot.user.name} apa itu rumus VLOOKUP?`")
         return
-    # Process prefix commands
     await bot.process_commands(message)
 @bot.tree.error
 async def on_error(i,e):
@@ -625,10 +619,8 @@ async def on_error(i,e):
         await i.response.send_message(f"❌ {str(e)[:100]}",ephemeral=True)
     except:
         pass
-# ============ PREFIX COMMANDS ============
 @bot.command(name="ai",aliases=["ask","chat","tanya"])
 async def prefix_ai(ctx,*,prompt:str=None):
-    """Tanya AI via prefix command"""
     if db.banned(ctx.author.id):
         return await ctx.reply("🚫 Kamu di-blacklist!")
     ok,remaining=rl.ok(ctx.author.id,"ai",10)
@@ -670,14 +662,13 @@ async def prefix_ai(ctx,*,prompt:str=None):
             await ctx.reply(f"❌ Error: `{ex}`")
 @bot.command(name="dump",aliases=["get","download"])
 async def prefix_dump(ctx,url:str=None,mode:str="auto"):
-    """Dump script via prefix command"""
     if db.banned(ctx.author.id):
         return await ctx.reply("🚫 Kamu di-blacklist!")
     ok,remaining=rl.ok(ctx.author.id,"dump",8)
     if not ok:
         return await ctx.reply(f"⏳ Tunggu **{remaining:.1f}s**")
     if not url:
-        return await ctx.reply(f"❌ Gunakan: `{PREFIX}dump <url> [mode]`\nModes: auto, stealth, aggressive, raw")
+        return await ctx.reply(f"❌ Gunakan: `{PREFIX}dump <url> [mode]`")
     async with ctx.typing():
         try:
             content,chosen_ua,method_used,attempts=await process_dump_request(url,mode)
@@ -707,30 +698,24 @@ async def prefix_dump(ctx,url:str=None,mode:str="auto"):
             await ctx.reply(f"💀 Error: `{ex}`")
 @bot.command(name="ping")
 async def prefix_ping(ctx):
-    """Check bot status"""
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
     await ctx.reply(embed=e)
-@bot.command(name="help",aliases=["h","?"])
+@bot.command(name="help",aliases=["h"])
 async def prefix_help(ctx):
-    """Show help"""
-    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot dengan Prefix, Mention, dan Slash Command",color=0x217346)
+    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot",color=0x217346)
     e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`\n• **Slash**: `/ai pertanyaan`",inline=False)
     e.add_field(name=f"🤖 {PREFIX}ai <prompt>",value="Tanya AI / Buat Excel",inline=False)
-    e.add_field(name=f"🔓 {PREFIX}dump <url> [mode]",value="Download script (modes: auto/stealth/aggressive/raw)",inline=False)
-    e.add_field(name=f"🧹 {PREFIX}clear",value="Hapus memory chat",inline=False)
-    e.add_field(name=f"📜 {PREFIX}history",value="Lihat history",inline=False)
-    e.add_field(name="📝 Contoh",value=f"```{PREFIX}ai buatkan excel invoice\n{PREFIX}dump https://site.com/script\n@{bot.user.name} apa itu rumus VLOOKUP?```",inline=False)
+    e.add_field(name=f"🔓 {PREFIX}dump <url>",value="Download script",inline=False)
+    e.add_field(name=f"🧹 {PREFIX}clear",value="Hapus memory",inline=False)
     await ctx.reply(embed=e)
-@bot.command(name="clear",aliases=["reset","cls"])
+@bot.command(name="clear",aliases=["reset"])
 async def prefix_clear(ctx):
-    """Clear memory"""
     mem.clear(ctx.author.id)
     await ctx.reply("🧹 Memory dihapus!")
 @bot.command(name="history",aliases=["hist"])
 async def prefix_history(ctx,limit:int=5):
-    """Show history"""
     h=db.hist(ctx.author.id,min(limit,10))
     if not h:
         return await ctx.reply("📭 History kosong")
@@ -741,7 +726,6 @@ async def prefix_history(ctx,limit:int=5):
 @bot.command(name="testai")
 @commands.is_owner()
 async def prefix_testai(ctx):
-    """Test all AI providers"""
     async with ctx.typing():
         results=[]
         test_msgs=[{"role":"user","content":"Say: OK"}]
@@ -766,7 +750,6 @@ async def prefix_testai(ctx):
 @bot.command(name="stats")
 @commands.is_owner()
 async def prefix_stats(ctx):
-    """Show stats"""
     st=db.get_stats()
     e=discord.Embed(title="📊 Stats",color=0x3498DB)
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
@@ -774,29 +757,23 @@ async def prefix_stats(ctx):
     if st:
         e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
     await ctx.reply(embed=e)
-# ============ SLASH COMMANDS ============
-@bot.tree.command(name="ping",description="🏓 Cek status bot")
+@bot.tree.command(name="ping",description="🏓 Cek status")
 async def slash_ping(i:discord.Interaction):
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    keys=f"Groq{'✅'if KEY_GROQ else'❌'} Cerebras{'✅'if KEY_CEREBRAS else'❌'} SN{'✅'if KEY_SAMBANOVA else'❌'} Cohere{'✅'if KEY_COHERE else'❌'} OR{'✅'if KEY_OPENROUTER else'❌'}"
-    e.add_field(name="AI Keys",value=keys,inline=False)
     await i.response.send_message(embed=e)
-@bot.tree.command(name="help",description="📚 Panduan bot")
+@bot.tree.command(name="help",description="📚 Panduan")
 async def slash_help(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot",description="Multi-AI Bot dengan 3 cara interaksi",color=0x217346)
-    e.add_field(name="💬 Cara Pakai",value=f"• **Mention**: @{bot.user.name} pertanyaan\n• **Prefix**: `{PREFIX}ai pertanyaan`\n• **Slash**: `/ai pertanyaan`",inline=False)
-    e.add_field(name="🤖 AI Commands",value=f"`{PREFIX}ai` `/ai` - Tanya AI\n`{PREFIX}dump` `/dump` - Dump script",inline=False)
-    e.add_field(name="🔧 Utilities",value=f"`{PREFIX}clear` `/clear` - Hapus memory\n`{PREFIX}history` - Lihat history",inline=False)
+    e=discord.Embed(title="📚 Excel AI Bot",color=0x217346)
+    e.add_field(name="💬 Cara Pakai",value=f"• Mention: @{bot.user.name} pertanyaan\n• Prefix: `{PREFIX}ai pertanyaan`\n• Slash: `/ai pertanyaan`",inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="dump",description="🔓 Dump script")
-@app_commands.describe(url="URL script",mode="Mode bypass")
+@app_commands.describe(url="URL script",mode="Mode")
 @app_commands.choices(mode=[
-    app_commands.Choice(name="🚀 Auto",value="auto"),
-    app_commands.Choice(name="🥷 Stealth",value="stealth"),
-    app_commands.Choice(name="⚡ Aggressive",value="aggressive"),
-    app_commands.Choice(name="📄 Raw",value="raw")
+    app_commands.Choice(name="Auto",value="auto"),
+    app_commands.Choice(name="Stealth",value="stealth"),
+    app_commands.Choice(name="Aggressive",value="aggressive")
 ])
 @rate(8)
 @noban()
@@ -821,24 +798,22 @@ async def slash_dump(i:discord.Interaction,url:str,mode:str="auto"):
         e=discord.Embed(title="🔓 Dump",description=status,color=color)
         e.add_field(name="Size",value=f"`{len(content):,}b`")
         e.add_field(name="Type",value=f"`.{ext}`")
-        e.add_field(name="UA",value=f"`{chosen_ua[:15]}...`")
         if potential_links:
             e.add_field(name="🔗 Links",value="\n".join([f"`{l[:50]}`"for l in potential_links[:3]]),inline=False)
         db.stat("dump",i.user.id)
         await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
     except Exception as ex:
         await i.followup.send(f"💀 Error: `{ex}`")
-@bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
-@app_commands.describe(perintah="Perintah",file="Upload file",model="AI model")
+@bot.tree.command(name="ai",description="🤖 Tanya AI")
+@app_commands.describe(perintah="Perintah",file="File",model="Model")
 @app_commands.choices(model=[
-    app_commands.Choice(name="🚀 Auto",value="auto"),
-    app_commands.Choice(name="⚡ Groq",value="groq"),
-    app_commands.Choice(name="🧠 Cerebras",value="cerebras"),
-    app_commands.Choice(name="🦣 SambaNova",value="sambanova"),
-    app_commands.Choice(name="🔷 Cohere",value="cohere"),
-    app_commands.Choice(name="🦙 OR Llama",value="or_llama"),
-    app_commands.Choice(name="🔵 OR Gemini",value="or_gemini"),
-    app_commands.Choice(name="🌺 Pollinations",value="pollinations")
+    app_commands.Choice(name="Auto",value="auto"),
+    app_commands.Choice(name="Groq",value="groq"),
+    app_commands.Choice(name="Cerebras",value="cerebras"),
+    app_commands.Choice(name="SambaNova",value="sambanova"),
+    app_commands.Choice(name="Cohere",value="cohere"),
+    app_commands.Choice(name="OR Llama",value="or_llama"),
+    app_commands.Choice(name="Pollinations",value="pollinations")
 ])
 @rate(10)
 @noban()
@@ -846,13 +821,7 @@ async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=No
     await i.response.defer()
     try:
         attachments=[file] if file else None
-        parsed,resp,used=await process_ai_request(
-            perintah,
-            i.user.id,
-            i.guild_id,
-            attachments,
-            model
-        )
+        parsed,resp,used=await process_ai_request(perintah,i.user.id,i.guild_id,attachments,model)
         action=parsed.get("action","text_only")
         msg=parsed.get("message","")
         if action=="generate_excel":
@@ -864,13 +833,11 @@ async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=No
             e=discord.Embed(title="📊 Excel Created!",color=0x217346)
             e.add_field(name="File",value=f"`{fn}`")
             e.add_field(name="Model",value=f"`{used}`")
-            if msg:
-                e.add_field(name="Info",value=msg[:300],inline=False)
             await i.followup.send(embed=e,file=discord.File(ef,fn))
         else:
             if not msg:
                 msg=resp
-            e=discord.Embed(title="🤖 AI Response",color=0x5865F2)
+            e=discord.Embed(title="🤖 AI",color=0x5865F2)
             e.set_footer(text=f"Model: {used}")
             ch=split_msg(msg)
             await i.followup.send(embed=e,content=ch[0])
@@ -882,7 +849,7 @@ async def slash_ai(i:discord.Interaction,perintah:str,file:discord.Attachment=No
 async def slash_clear(i:discord.Interaction):
     mem.clear(i.user.id)
     await i.response.send_message("🧹 Cleared!",ephemeral=True)
-@bot.tree.command(name="testai",description="🔧 Test semua AI")
+@bot.tree.command(name="testai",description="🔧 Test AI")
 @owner()
 async def slash_testai(i:discord.Interaction):
     await i.response.defer()
@@ -906,17 +873,7 @@ async def slash_testai(i:discord.Interaction):
             results.append(f"❌ **{name}**: Error")
     e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
     await i.followup.send(embed=e)
-@bot.tree.command(name="stats",description="📊 Stats (Owner)")
-@owner()
-async def slash_stats(i:discord.Interaction):
-    st=db.get_stats()
-    e=discord.Embed(title="📊 Stats",color=0x3498DB)
-    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
-    if st:
-        e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
-    await i.response.send_message(embed=e)
-@bot.tree.command(name="reload",description="🔄 Sync (Owner)")
+@bot.tree.command(name="reload",description="🔄 Sync")
 @owner()
 async def slash_reload(i:discord.Interaction):
     await i.response.defer()
