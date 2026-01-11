@@ -1,7 +1,6 @@
 import discord,os,io,re,time,json,logging,sqlite3,random
 from collections import defaultdict
 from dataclasses import dataclass
-from urllib.parse import quote
 from discord import app_commands
 from discord.ext import commands
 try:from keep_alive import keep_alive
@@ -12,6 +11,9 @@ DISCORD_TOKEN=os.getenv("DISCORD_TOKEN")
 KEY_GROQ=os.getenv("GROQ_API_KEY")
 KEY_GEMINI=os.getenv("GEMINI_API_KEY")
 KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY")
+KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY")
+KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY")
+KEY_COHERE=os.getenv("COHERE_API_KEY")
 OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
 if not DISCORD_TOKEN:print("❌ NO TOKEN!");exit(1)
 intents=discord.Intents.default()
@@ -187,7 +189,7 @@ Jika hanya jawab pertanyaan:
 {"action":"text_only","message":"jawaban lengkap disini"}
 
 Jawab dalam Bahasa Indonesia. JANGAN tambahkan teks apapun selain JSON.'''
-OR_FREE={"llama":"meta-llama/llama-3.3-70b-instruct:free","gemini":"google/gemini-2.0-flash-exp:free","mistral":"mistralai/mistral-7b-instruct:free","qwen":"qwen/qwen-2-7b-instruct:free"}
+OR_FREE={"llama":"meta-llama/llama-3.3-70b-instruct:free","gemini":"google/gemini-2.0-flash-exp:free","mistral":"mistralai/mistral-7b-instruct:free","qwen":"qwen/qwen-2-7b-instruct:free","deepseek":"deepseek/deepseek-r1:free","phi":"microsoft/phi-3-medium-128k-instruct:free"}
 def call_groq(msgs):
     cl=get_groq()
     if not cl:
@@ -216,62 +218,138 @@ def call_openrouter(msgs,model_key="llama"):
             logger.info(f"OpenRouter: Success, length={len(resp)}")
             return resp
         else:
-            logger.error(f"OpenRouter: HTTP {r.status_code}")
+            logger.error(f"OpenRouter: HTTP {r.status_code} - {r.text[:200]}")
             return None
     except Exception as e:
         logger.error(f"OpenRouter: Error - {e}")
+        return None
+def call_cerebras(msgs):
+    if not KEY_CEREBRAS:
+        logger.info("Cerebras: No API key")
+        return None
+    try:
+        logger.info("Cerebras: Calling...")
+        req=get_requests()
+        r=req.post("https://api.cerebras.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_CEREBRAS}","Content-Type":"application/json"},json={"model":"llama-3.3-70b","messages":msgs,"temperature":0.2,"max_tokens":8000},timeout=30)
+        if r.status_code==200:
+            resp=r.json()["choices"][0]["message"]["content"]
+            logger.info(f"Cerebras: Success, length={len(resp)}")
+            return resp
+        else:
+            logger.error(f"Cerebras: HTTP {r.status_code} - {r.text[:200]}")
+            return None
+    except Exception as e:
+        logger.error(f"Cerebras: Error - {e}")
+        return None
+def call_sambanova(msgs):
+    if not KEY_SAMBANOVA:
+        logger.info("SambaNova: No API key")
+        return None
+    try:
+        logger.info("SambaNova: Calling...")
+        req=get_requests()
+        r=req.post("https://api.sambanova.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_SAMBANOVA}","Content-Type":"application/json"},json={"model":"Meta-Llama-3.1-405B-Instruct","messages":msgs,"temperature":0.2,"max_tokens":8000},timeout=60)
+        if r.status_code==200:
+            resp=r.json()["choices"][0]["message"]["content"]
+            logger.info(f"SambaNova: Success, length={len(resp)}")
+            return resp
+        else:
+            logger.error(f"SambaNova: HTTP {r.status_code} - {r.text[:200]}")
+            return None
+    except Exception as e:
+        logger.error(f"SambaNova: Error - {e}")
+        return None
+def call_cohere(msgs):
+    if not KEY_COHERE:
+        logger.info("Cohere: No API key")
+        return None
+    try:
+        logger.info("Cohere: Calling...")
+        req=get_requests()
+        chat_history=[]
+        user_msg=""
+        for m in msgs:
+            if m["role"]=="system":
+                chat_history.append({"role":"SYSTEM","message":m["content"]})
+            elif m["role"]=="user":
+                user_msg=m["content"]
+            elif m["role"]=="assistant":
+                chat_history.append({"role":"CHATBOT","message":m["content"]})
+        r=req.post("https://api.cohere.ai/v1/chat",headers={"Authorization":f"Bearer {KEY_COHERE}","Content-Type":"application/json"},json={"model":"command-r-plus","message":user_msg,"chat_history":chat_history,"temperature":0.2},timeout=60)
+        if r.status_code==200:
+            resp=r.json().get("text","")
+            logger.info(f"Cohere: Success, length={len(resp)}")
+            return resp
+        else:
+            logger.error(f"Cohere: HTTP {r.status_code} - {r.text[:200]}")
+            return None
+    except Exception as e:
+        logger.error(f"Cohere: Error - {e}")
         return None
 def call_gemini(prompt):
     if not KEY_GEMINI:
         logger.info("Gemini: No API key")
         return None
-    try:
-        logger.info("Gemini: Calling via REST API...")
-        req=get_requests()
-        models=["gemini-1.5-flash","gemini-1.5-pro","gemini-2.0-flash-exp"]
-        for model in models:
-            try:
-                url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={KEY_GEMINI}"
-                payload={"contents":[{"parts":[{"text":f"{EXCEL_PROMPT}\n\nUser: {prompt}"}]}],"generationConfig":{"temperature":0.2,"maxOutputTokens":8000}}
-                r=req.post(url,json=payload,timeout=30,headers={"Content-Type":"application/json"})
-                if r.status_code==200:
-                    data=r.json()
-                    if "candidates" in data and len(data["candidates"])>0:
-                        candidate=data["candidates"][0]
-                        if "content" in candidate and "parts" in candidate["content"]:
-                            text=candidate["content"]["parts"][0].get("text","")
-                            if text:
-                                logger.info(f"Gemini ({model}): Success, length={len(text)}")
-                                return text
-                elif r.status_code==429:
-                    logger.warning(f"Gemini ({model}): Rate limit, trying next...")
-                    continue
-                elif r.status_code==404:
-                    logger.warning(f"Gemini ({model}): Model not found, trying next...")
-                    continue
-                else:
-                    logger.warning(f"Gemini ({model}): HTTP {r.status_code} - {r.text[:100]}")
-                    continue
-            except Exception as e:
-                logger.error(f"Gemini ({model}): {e}")
+    req=get_requests()
+    models=["gemini-1.5-flash-latest","gemini-1.5-flash","gemini-pro"]
+    for model in models:
+        try:
+            logger.info(f"Gemini ({model}): Trying...")
+            url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            payload={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.2,"maxOutputTokens":8000}}
+            r=req.post(url,params={"key":KEY_GEMINI},json=payload,headers={"Content-Type":"application/json"},timeout=30)
+            if r.status_code==200:
+                data=r.json()
+                if "candidates" in data and len(data["candidates"])>0:
+                    parts=data["candidates"][0].get("content",{}).get("parts",[])
+                    if parts and "text" in parts[0]:
+                        text=parts[0]["text"]
+                        if text:
+                            logger.info(f"Gemini ({model}): Success")
+                            return text
+            elif r.status_code==429:
+                time.sleep(1)
                 continue
-        logger.error("Gemini: All models failed")
-        return None
-    except Exception as e:
-        logger.error(f"Gemini: Error - {e}")
-        return None
+            else:
+                continue
+        except Exception as e:
+            logger.error(f"Gemini ({model}): {e}")
+            continue
+    return None
 def call_pollinations(prompt):
+    req=get_requests()
     try:
-        logger.info("Pollinations: Calling...")
-        req=get_requests()
-        full_prompt=f"{EXCEL_PROMPT}\n\nUser: {prompt}"
-        r=req.get(f"https://text.pollinations.ai/{quote(full_prompt[:2000])}",timeout=60)
-        if r.ok and len(r.text)>10:
+        logger.info("Pollinations: Trying...")
+        r=req.post("https://text.pollinations.ai/",json={"messages":[{"role":"user","content":prompt}],"model":"openai"},headers={"Content-Type":"application/json"},timeout=60)
+        if r.ok and r.text and len(r.text)>5:
             logger.info(f"Pollinations: Success, length={len(r.text)}")
             return r.text
+    except Exception as e:
+        logger.warning(f"Pollinations: {e}")
+    try:
+        import urllib.parse
+        encoded=urllib.parse.quote(prompt[:500].replace('\n',' '),safe='')
+        r=req.get(f"https://text.pollinations.ai/{encoded}",timeout=60)
+        if r.ok and r.text and len(r.text)>5 and "<!DOCTYPE" not in r.text[:50]:
+            return r.text
+    except:pass
+    return None
+def call_huggingface(msgs):
+    try:
+        logger.info("HuggingFace: Calling...")
+        req=get_requests()
+        prompt="\n".join([f"{m['role']}: {m['content']}" for m in msgs])
+        r=req.post("https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",headers={"Content-Type":"application/json"},json={"inputs":prompt,"parameters":{"max_new_tokens":2000,"temperature":0.2}},timeout=60)
+        if r.status_code==200:
+            data=r.json()
+            if isinstance(data,list)and len(data)>0:
+                text=data[0].get("generated_text","")
+                if text:
+                    logger.info(f"HuggingFace: Success")
+                    return text
         return None
     except Exception as e:
-        logger.error(f"Pollinations: Error - {e}")
+        logger.error(f"HuggingFace: {e}")
         return None
 def ask_ai(prompt,uid=None,model="auto"):
     msgs=[{"role":"system","content":EXCEL_PROMPT},{"role":"user","content":prompt}]
@@ -279,45 +357,42 @@ def ask_ai(prompt,uid=None,model="auto"):
         history=mem.get(uid)
         if history:msgs=[{"role":"system","content":EXCEL_PROMPT}]+history+[{"role":"user","content":prompt}]
     result=None;used_model="none"
-    logger.info(f"ask_ai called with model={model}")
-    if model=="groq":result=call_groq(msgs);used_model="Groq"
-    elif model=="gemini":result=call_gemini(prompt);used_model="Gemini"
-    elif model=="pollinations":result=call_pollinations(prompt);used_model="Pollinations"
-    elif model.startswith("or_"):mk=model[3:];result=call_openrouter(msgs,mk);used_model=f"OpenRouter({mk})"
+    logger.info(f"ask_ai: model={model}")
+    if model=="groq":result=call_groq(msgs);used_model="Groq"if result else"none"
+    elif model=="cerebras":result=call_cerebras(msgs);used_model="Cerebras"if result else"none"
+    elif model=="sambanova":result=call_sambanova(msgs);used_model="SambaNova"if result else"none"
+    elif model=="cohere":result=call_cohere(msgs);used_model="Cohere"if result else"none"
+    elif model=="gemini":result=call_gemini(prompt);used_model="Gemini"if result else"none"
+    elif model=="pollinations":result=call_pollinations(prompt);used_model="Pollinations"if result else"none"
+    elif model=="huggingface":result=call_huggingface(msgs);used_model="HuggingFace"if result else"none"
+    elif model.startswith("or_"):mk=model[3:];result=call_openrouter(msgs,mk);used_model=f"OpenRouter({mk})"if result else"none"
     else:
-        logger.info("Auto mode: trying Groq first...")
-        result=call_groq(msgs)
-        if result:used_model="Groq"
-        else:
-            logger.info("Auto mode: trying OpenRouter...")
-            result=call_openrouter(msgs,"llama")
-            if result:used_model="OpenRouter"
-            else:
-                logger.info("Auto mode: trying Gemini...")
-                result=call_gemini(prompt)
-                if result:used_model="Gemini"
-                else:
-                    logger.info("Auto mode: trying Pollinations...")
-                    result=call_pollinations(prompt)
-                    if result:used_model="Pollinations"
+        providers=[(lambda:call_groq(msgs),"Groq"),(lambda:call_cerebras(msgs),"Cerebras"),(lambda:call_openrouter(msgs,"llama"),"OpenRouter"),(lambda:call_sambanova(msgs),"SambaNova"),(lambda:call_cohere(msgs),"Cohere"),(lambda:call_gemini(prompt),"Gemini"),(lambda:call_pollinations(prompt),"Pollinations")]
+        for fn,name in providers:
+            logger.info(f"Auto: trying {name}...")
+            result=fn()
+            if result:
+                used_model=name
+                break
     if not result and model!="auto":
-        logger.info(f"{model} failed, trying fallbacks...")
-        for fn,name in[(lambda:call_groq(msgs),"Groq"),(lambda:call_openrouter(msgs,"llama"),"OpenRouter"),(lambda:call_gemini(prompt),"Gemini"),(lambda:call_pollinations(prompt),"Pollinations")]:
+        logger.info(f"{model} failed, fallback...")
+        for fn,name in[(lambda:call_groq(msgs),"Groq"),(lambda:call_cerebras(msgs),"Cerebras"),(lambda:call_openrouter(msgs,"llama"),"OpenRouter")]:
             result=fn()
             if result:used_model=f"{name}(fallback)";break
-    if not result:result='{"action":"text_only","message":"❌ Semua AI tidak tersedia saat ini."}';used_model="none"
+    if not result:
+        result='{"action":"text_only","message":"❌ Semua AI tidak tersedia."}'
+        used_model="none"
     if uid and result:mem.add(uid,"user",prompt);mem.add(uid,"assistant",result)
-    logger.info(f"Final model used: {used_model}")
+    logger.info(f"Final: {used_model}")
     return result,used_model
 def fix_json(t):
     t=t.strip()
     t=re.sub(r',(\s*[}\]])',r'\1',t)
-    t=re.sub(r'"\s*\.\s*"','","',t)
     t=t.replace("'",'"')
     ob,cb=t.count('{'),t.count('}')
     if ob>cb:t+='}'*(ob-cb)
-    os_,cs=t.count('['),t.count(']')
-    if os_>cs:t+=']'*(os_-cs)
+    osb,csb=t.count('['),t.count(']')
+    if osb>csb:t+=']'*(osb-csb)
     return t
 def parse_ai(resp):
     resp=resp.strip()
@@ -348,14 +423,15 @@ def split_msg(t,lim=1900):
     if cur:ch.append(cur)
     return ch or[t[:lim]]
 def get_roblox_headers():
-    return{"User-Agent":random.choice(UA_LIST),"Roblox-Place-Id":"2753915549","Roblox-Game-Id":"9876543210","Roblox-Universe-Id":"1234567890","Accept":"*/*","Accept-Language":"en-US,en;q=0.9","Accept-Encoding":"gzip,deflate,br","Connection":"keep-alive","Cache-Control":"no-cache"}
-def valid_url(u):return u.startswith(("http://","https://"))and not any(x in u.lower()for x in["localhost","127.0.0.1","0.0.0.0","[::1]","127.1"])
+    return{"User-Agent":random.choice(UA_LIST),"Roblox-Place-Id":"2753915549","Roblox-Game-Id":"9876543210","Accept":"*/*","Connection":"keep-alive"}
+def valid_url(u):return u.startswith(("http://","https://"))and not any(x in u.lower()for x in["localhost","127.0.0.1","0.0.0.0"])
 def extract_potential_links(html):
-    patterns=[r'https?://[^\s"\'<>\)]+\.lua[^\s"\'<>\)]*',r'https?://[^\s"\'<>\)]*(?:raw|get|api|script|load|paste)[^\s"\'<>\)]*',r'https?://(?:pastebin\.com|raw\.githubusercontent\.com|gist\.githubusercontent\.com|rentry\.co|hastebin\.com)[^\s"\'<>\)]+',r'loadstring\s*\(\s*game\s*:\s*HttpGet\s*\(\s*["\']([^"\']+)["\']',r'["\']?(https?://[^\s"\'<>\)]+)["\']?\s*(?:,|\))',r'(?:url|link|script|source)\s*[=:]\s*["\']?(https?://[^\s"\'<>\)]+)']
+    patterns=[r'https?://[^\s"\'<>\)]+\.lua',r'https?://[^\s"\'<>\)]*(?:raw|get|api|script|paste)[^\s"\'<>\)]*',r'https?://(?:pastebin\.com|raw\.githubusercontent\.com)[^\s"\'<>\)]+']
     links=set()
     for p in patterns:
-        for m in re.findall(p,html,re.IGNORECASE):links.add(m if isinstance(m,str)else m[0]if m else"")
-    return[l for l in links if l and l.startswith("http")and len(l)>15]
+        for m in re.findall(p,html,re.IGNORECASE):
+            if m:links.add(m)
+    return[l for l in links if l.startswith("http")]
 @bot.event
 async def on_ready():
     logger.info(f'🔥 {bot.user}|{len(bot.guilds)} guilds')
@@ -371,20 +447,20 @@ async def ping(i:discord.Interaction):
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="AI Keys",value=f"Groq{'✅'if KEY_GROQ else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} Router{'✅'if KEY_OPENROUTER else'❌'}")
+    keys=f"Groq{'✅'if KEY_GROQ else'❌'} Cerebras{'✅'if KEY_CEREBRAS else'❌'} SambaNova{'✅'if KEY_SAMBANOVA else'❌'} Cohere{'✅'if KEY_COHERE else'❌'} Router{'✅'if KEY_OPENROUTER else'❌'}"
+    e.add_field(name="AI Keys",value=keys,inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="help",description="📚 Panduan bot")
 async def help_cmd(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot + Script Dumper",description="Bot untuk Excel & Script Dumper Roblox",color=0x217346)
-    e.add_field(name="🔓 /dump <url> [mode]",value="Download script Luarmor/Protected\n**Modes:** auto, stealth, aggressive, raw",inline=False)
-    e.add_field(name="🤖 /ai <perintah> [file] [model]",value="Tanya AI / Buat Excel\n**Models:** Auto, Groq, Gemini, OpenRouter, Pollinations",inline=False)
-    e.add_field(name="🔧 /testai",value="Test koneksi semua AI",inline=False)
-    e.add_field(name="📝 Contoh Dump",value="```/dump https://luarmor.net/... mode:stealth\n/dump https://api.luarmor.net/files/v3/loaders/...```",inline=False)
+    e=discord.Embed(title="📚 Excel AI Bot + Script Dumper",description="Multi-AI Bot dengan 7+ Provider",color=0x217346)
+    e.add_field(name="🔓 /dump <url> [mode]",value="Download script Luarmor/Protected",inline=False)
+    e.add_field(name="🤖 /ai <perintah> [model]",value="**Models:** Auto, Groq, Cerebras, SambaNova, Cohere, OpenRouter, Gemini, Pollinations, HuggingFace",inline=False)
+    e.add_field(name="🔧 /testai",value="Test semua AI provider",inline=False)
     e.add_field(name="🔧 Lainnya",value="`/clear` `/history` `/stats` `/reload`",inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="dump",description="🔓 Dump script Luarmor/Protected")
-@app_commands.describe(url="URL script target",mode="Mode bypass")
-@app_commands.choices(mode=[app_commands.Choice(name="🚀 Auto (Recommended)",value="auto"),app_commands.Choice(name="🥷 Stealth (Slow but safe)",value="stealth"),app_commands.Choice(name="⚡ Aggressive (Multi-attempt)",value="aggressive"),app_commands.Choice(name="📄 Raw (Direct request)",value="raw")])
+@app_commands.describe(url="URL script",mode="Mode bypass")
+@app_commands.choices(mode=[app_commands.Choice(name="🚀 Auto",value="auto"),app_commands.Choice(name="🥷 Stealth",value="stealth"),app_commands.Choice(name="⚡ Aggressive",value="aggressive"),app_commands.Choice(name="📄 Raw",value="raw")])
 @rate(8)
 @noban()
 async def dump(i:discord.Interaction,url:str,mode:str="auto"):
@@ -397,68 +473,58 @@ async def dump(i:discord.Interaction,url:str,mode:str="auto"):
         if mode=="stealth":browsers=["safari15_5","chrome110"];time.sleep(random.uniform(0.5,1.5))
         for browser in browsers:
             chosen_ua=random.choice(UA_LIST)
-            hdrs=get_roblox_headers()
-            hdrs["User-Agent"]=chosen_ua
+            hdrs=get_roblox_headers();hdrs["User-Agent"]=chosen_ua
             try:
                 r=curl.get(url,impersonate=browser,headers=hdrs,timeout=20)
-                content=r.text;method_used=f"{browser}+{chosen_ua[:15]}";attempts.append(f"✅ {browser}")
-                if"<!DOCTYPE"not in content[:200]and"<html"not in content[:100].lower():break
+                content=r.text;method_used=f"{browser}";attempts.append(f"✅ {browser}")
+                if"<!DOCTYPE"not in content[:200]:break
                 attempts[-1]=f"⚠️ {browser}(HTML)"
-            except Exception as ex:attempts.append(f"❌ {browser}:{str(ex)[:20]}")
-        if not content:return await i.followup.send(f"💀 Semua metode gagal!\n```{chr(10).join(attempts)}```")
-        ext="lua";status="";color=0x00FF00;potential_links=[]
-        if"<!DOCTYPE"in content[:500]or"<html"in content[:200].lower():
+            except Exception as ex:attempts.append(f"❌ {browser}")
+        if not content:return await i.followup.send("💀 Gagal!")
+        ext="lua";status="✅ **BERHASIL!**";color=0x00FF00;potential_links=[]
+        if"<!DOCTYPE"in content[:500]:
             ext="html";color=0xFFFF00
             potential_links=extract_potential_links(content)
-            if potential_links:status=f"⚠️ **HTML Detected** - Ditemukan {len(potential_links)} link potensial"
-            else:status="❌ **HTML/JS Challenge** - Tidak ada link ditemukan"
-        elif content.strip().startswith(("{","[")):ext="json";status="📋 **JSON Response**"
-        else:status="✅ **SCRIPT BERHASIL DIDUMP!**";color=0x00FF00
-        e=discord.Embed(title="🔓 Dump Result",description=status,color=color)
-        e.add_field(name="📦 Size",value=f"`{len(content):,} bytes`",inline=True)
-        e.add_field(name="📄 Type",value=f"`.{ext}`",inline=True)
-        e.add_field(name="🎭 UA",value=f"`{chosen_ua[:20]}...`",inline=True)
-        e.add_field(name="🔧 Method",value=f"`{method_used}`",inline=True)
-        e.add_field(name="🌐 Mode",value=f"`{mode}`",inline=True)
-        if len(attempts)>1:e.add_field(name="📊 Attempts",value=f"```{chr(10).join(attempts[:5])}```",inline=False)
-        if potential_links:
-            links_text="\n".join([f"• `{l[:60]}...`"if len(l)>60 else f"• `{l}`"for l in potential_links[:5]])
-            e.add_field(name="🔗 Potential Scripts",value=links_text,inline=False)
-            if len(potential_links)>5:e.set_footer(text=f"+{len(potential_links)-5} more links found")
+            status=f"⚠️ **HTML** - {len(potential_links)} link" if potential_links else "❌ **HTML/JS Challenge**"
+        elif content.strip().startswith("{"):ext="json";status="📋 **JSON**"
+        e=discord.Embed(title="🔓 Dump",description=status,color=color)
+        e.add_field(name="Size",value=f"`{len(content):,}b`")
+        e.add_field(name="Type",value=f"`.{ext}`")
+        e.add_field(name="UA",value=f"`{chosen_ua[:15]}...`")
+        if potential_links:e.add_field(name="🔗 Links",value="\n".join([f"`{l[:50]}`"for l in potential_links[:3]]),inline=False)
         db.stat("dump",i.user.id)
         await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
     except Exception as ex:
-        logger.error(f"Dump error: {ex}")
-        await i.followup.send(f"💀 Error: `{str(ex)[:200]}`")
-@bot.tree.command(name="testai",description="🔧 Test koneksi semua AI")
+        await i.followup.send(f"💀 Error: `{ex}`")
+@bot.tree.command(name="testai",description="🔧 Test semua AI")
 @owner()
 async def testai(i:discord.Interaction):
     await i.response.defer()
     results=[]
-    test_msgs=[{"role":"user","content":"Jawab hanya dengan satu kata: OK"}]
-    r=call_groq(test_msgs);results.append(f"{'✅'if r else'❌'} **Groq**: {r[:50].strip()if r else'Failed'}")
-    r=call_openrouter(test_msgs,"llama");results.append(f"{'✅'if r else'❌'} **OpenRouter**: {r[:50].strip()if r else'Failed'}")
-    r=call_gemini("Jawab hanya dengan satu kata: OK");results.append(f"{'✅'if r else'❌'} **Gemini**: {r[:50].strip()if r else'Failed'}")
-    r=call_pollinations("Jawab hanya dengan satu kata: OK");results.append(f"{'✅'if r else'❌'} **Pollinations**: {r[:50].strip()if r else'Failed'}")
-    e=discord.Embed(title="🔧 AI Test Results",description="\n".join(results),color=0x3498DB)
-    e.set_footer(text="Gemini menggunakan REST API v1beta")
+    test_msgs=[{"role":"user","content":"Say OK"}]
+    providers=[("Groq",lambda:call_groq(test_msgs)),("Cerebras",lambda:call_cerebras(test_msgs)),("SambaNova",lambda:call_sambanova(test_msgs)),("Cohere",lambda:call_cohere(test_msgs)),("OpenRouter",lambda:call_openrouter(test_msgs,"llama")),("Gemini",lambda:call_gemini("Say OK")),("Pollinations",lambda:call_pollinations("Say OK")),("HuggingFace",lambda:call_huggingface(test_msgs))]
+    for name,fn in providers:
+        try:
+            r=fn()
+            results.append(f"{'✅'if r else'❌'} **{name}**: {r[:30].strip()if r else'Failed'}")
+        except Exception as e:
+            results.append(f"❌ **{name}**: Error")
+    e=discord.Embed(title="🔧 AI Test",description="\n".join(results),color=0x3498DB)
     await i.followup.send(embed=e)
 @bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
-@app_commands.describe(perintah="Perintah untuk AI",file="Upload file",model="Pilih AI model")
-@app_commands.choices(model=[app_commands.Choice(name="🚀 Auto (Recommended)",value="auto"),app_commands.Choice(name="⚡ Groq (Fast)",value="groq"),app_commands.Choice(name="🧠 Gemini (REST API)",value="gemini"),app_commands.Choice(name="🦙 OpenRouter Llama",value="or_llama"),app_commands.Choice(name="🔵 OpenRouter Gemini",value="or_gemini"),app_commands.Choice(name="🌺 Pollinations",value="pollinations")])
+@app_commands.describe(perintah="Perintah",file="Upload file",model="AI model")
+@app_commands.choices(model=[app_commands.Choice(name="🚀 Auto",value="auto"),app_commands.Choice(name="⚡ Groq",value="groq"),app_commands.Choice(name="🧠 Cerebras (Fastest)",value="cerebras"),app_commands.Choice(name="🦣 SambaNova (405B)",value="sambanova"),app_commands.Choice(name="🔷 Cohere",value="cohere"),app_commands.Choice(name="🦙 OpenRouter Llama",value="or_llama"),app_commands.Choice(name="🔵 OpenRouter Gemini",value="or_gemini"),app_commands.Choice(name="🧪 OpenRouter DeepSeek",value="or_deepseek"),app_commands.Choice(name="🌺 Pollinations",value="pollinations"),app_commands.Choice(name="🤗 HuggingFace",value="huggingface")])
 @rate(10)
 @noban()
 async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None,model:str="auto"):
     await i.response.defer()
-    logger.info(f"AI command: model={model}, prompt={perintah[:50]}...")
     try:
         parts=[perintah]
         if file:
             fc,ft,meta=await freader.read(file)
-            parts.append(f"\n\n=== FILE: {file.filename} ({ft}) ===\n{json.dumps(meta,ensure_ascii=False)}\n\n{fc}")
+            parts.append(f"\n\n=== FILE: {file.filename} ===\n{fc}")
         prompt='\n'.join(parts)
         resp,used=ask_ai(prompt,i.user.id,model)
-        logger.info(f"AI response received from {used}, length={len(resp)}")
         parsed=parse_ai(resp)
         action=parsed.get("action","text_only")
         msg=parsed.get("message","")
@@ -467,19 +533,12 @@ async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None
         if action=="generate_excel":
             ed=parsed.get("excel_data",{})
             fn=ed.get("filename","output.xlsx")
-            if not fn.endswith('.xlsx'):fn+='.xlsx'
-            try:
-                ef=egen.generate(ed)
-                e=discord.Embed(title="📊 Excel Created!",color=0x217346)
-                e.add_field(name="📄 File",value=f"`{fn}`",inline=True)
-                e.add_field(name="🤖 Model",value=f"`{used}`",inline=True)
-                sheets=ed.get("sheets",[])
-                if sheets:e.add_field(name="📊 Rows",value=f"`{sum(len(s.get('data',[]))for s in sheets)}`",inline=True)
-                if msg:e.add_field(name="💬 Info",value=msg[:400],inline=False)
-                await i.followup.send(embed=e,file=discord.File(ef,fn))
-            except Exception as ex:
-                logger.error(f"Excel generation error: {ex}")
-                await i.followup.send(f"⚠️ Excel error: `{ex}`\n\nRaw response:\n```json\n{resp[:1000]}```")
+            ef=egen.generate(ed)
+            e=discord.Embed(title="📊 Excel Created!",color=0x217346)
+            e.add_field(name="File",value=f"`{fn}`")
+            e.add_field(name="Model",value=f"`{used}`")
+            if msg:e.add_field(name="Info",value=msg[:300],inline=False)
+            await i.followup.send(embed=e,file=discord.File(ef,fn))
         else:
             if not msg:msg=resp
             e=discord.Embed(title="🤖 AI Response",color=0x5865F2)
@@ -488,54 +547,46 @@ async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None
             await i.followup.send(embed=e,content=ch[0])
             for c in ch[1:]:await i.channel.send(c)
     except Exception as ex:
-        logger.error(f"AI command error: {ex}")
-        await i.followup.send(f"❌ Error: `{str(ex)[:200]}`")
-@bot.tree.command(name="clear",description="🧹 Hapus memory chat")
+        await i.followup.send(f"❌ Error: `{ex}`")
+@bot.tree.command(name="clear",description="🧹 Hapus memory")
 async def clear_cmd(i:discord.Interaction):
     mem.clear(i.user.id)
-    await i.response.send_message("🧹 Memory dihapus!",ephemeral=True)
-@bot.tree.command(name="history",description="📜 Lihat history chat")
-@app_commands.describe(limit="Jumlah (max 10)")
+    await i.response.send_message("🧹 Cleared!",ephemeral=True)
+@bot.tree.command(name="history",description="📜 History chat")
 async def history_cmd(i:discord.Interaction,limit:int=5):
     h=db.hist(i.user.id,min(limit,10))
-    if not h:return await i.response.send_message("📭 History kosong.",ephemeral=True)
-    e=discord.Embed(title="📜 Chat History",color=0x3498DB)
-    for idx,(p,r)in enumerate(h,1):e.add_field(name=f"{idx}. {p[:35]}...",value=f"```{r[:70]}...```",inline=False)
+    if not h:return await i.response.send_message("📭 Kosong",ephemeral=True)
+    e=discord.Embed(title="📜 History",color=0x3498DB)
+    for idx,(p,r)in enumerate(h,1):e.add_field(name=f"{idx}. {p[:30]}...",value=f"```{r[:50]}...```",inline=False)
     await i.response.send_message(embed=e,ephemeral=True)
-@bot.tree.command(name="stats",description="📊 Statistik bot (Owner)")
+@bot.tree.command(name="stats",description="📊 Stats (Owner)")
 @owner()
 async def stats_cmd(i:discord.Interaction):
     st=db.get_stats()
-    e=discord.Embed(title="📊 Bot Stats",color=0x3498DB)
-    e.add_field(name="🌐 Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="👥 Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
-    if st:e.add_field(name="📈 Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:8]]),inline=False)
+    e=discord.Embed(title="📊 Stats",color=0x3498DB)
+    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
+    e.add_field(name="Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
+    if st:e.add_field(name="Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:5]]),inline=False)
     await i.response.send_message(embed=e)
-@bot.tree.command(name="blacklist",description="🚫 Ban user (Owner)")
+@bot.tree.command(name="blacklist",description="🚫 Ban (Owner)")
 @owner()
-@app_commands.describe(user="User target",reason="Alasan")
-async def bl_cmd(i:discord.Interaction,user:discord.User,reason:str="No reason"):
+async def bl_cmd(i:discord.Interaction,user:discord.User,reason:str=""):
     db.ban(user.id,reason,i.user.id)
-    await i.response.send_message(f"🚫 **{user}** di-blacklist: {reason}")
-@bot.tree.command(name="unblacklist",description="✅ Unban user (Owner)")
+    await i.response.send_message(f"🚫 {user} banned")
+@bot.tree.command(name="unblacklist",description="✅ Unban (Owner)")
 @owner()
-@app_commands.describe(user="User target")
 async def ubl_cmd(i:discord.Interaction,user:discord.User):
     db.unban(user.id)
-    await i.response.send_message(f"✅ **{user}** di-unblacklist")
-@bot.tree.command(name="reload",description="🔄 Sync commands (Owner)")
+    await i.response.send_message(f"✅ {user} unbanned")
+@bot.tree.command(name="reload",description="🔄 Sync (Owner)")
 @owner()
 async def reload_cmd(i:discord.Interaction):
     await i.response.defer()
-    try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)} commands synced!")
-    except Exception as e:await i.followup.send(f"❌ Error: {e}")
+    try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)} synced")
+    except Exception as e:await i.followup.send(f"❌ {e}")
 if __name__=="__main__":
     keep_alive()
-    time.sleep(1)
-    print("🚀 Excel AI Bot + Script Dumper Starting...")
-    print(f"📦 Keys: Groq{'✅'if KEY_GROQ else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} OpenRouter{'✅'if KEY_OPENROUTER else'❌'}")
-    print(f"🎭 Loaded {len(UA_LIST)} User-Agents")
-    print("🔄 Gemini menggunakan REST API v1beta")
+    print("🚀 Starting...")
+    print(f"📦 Groq{'✅'if KEY_GROQ else'❌'} Cerebras{'✅'if KEY_CEREBRAS else'❌'} SambaNova{'✅'if KEY_SAMBANOVA else'❌'} Cohere{'✅'if KEY_COHERE else'❌'} Router{'✅'if KEY_OPENROUTER else'❌'}")
     try:bot.run(DISCORD_TOKEN,log_handler=None)
-    except discord.LoginFailure:print("❌ Invalid Token!")
     except Exception as e:print(f"❌ {e}")
