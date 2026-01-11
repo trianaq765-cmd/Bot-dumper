@@ -1,19 +1,10 @@
-from flask import Flask,jsonify
+from flask import Flask
 from threading import Thread
-import os,logging
-logging.getLogger('werkzeug').setLevel(logging.ERROR)
+import os
 app=Flask(__name__)
 @app.route('/')
-def home():return jsonify({"status":"online","message":"Bot is running!"})
+def h():return'{"status":"ok"}'
 @app.route('/health')
-def health():return"OK",200
-@app.route('/ping')
-def ping():return"pong"
-def run():
-    port=int(os.environ.get('PORT',8080))
-    print(f"🌐 Web server starting on port {port}")
-    app.run(host='0.0.0.0',port=port,threaded=True)
-def keep_alive():
-    t=Thread(target=run,daemon=True)
-    t.start()
-    print("✅ Keep-alive server started")
+def hp():return'OK'
+def run():app.run(host='0.0.0.0',port=int(os.environ.get('PORT',8080)),threaded=True,use_reloader=False)
+def keep_alive():Thread(target=run,daemon=True).start();print("✅ Server ready")
