@@ -5,6 +5,8 @@ from urllib.parse import quote
 from discord import app_commands
 from discord.ext import commands
 from keep_alive import keep_alive
+
+# CONFIG & LOGGING
 logging.basicConfig(level=logging.INFO,format='%(asctime)s|%(levelname)s|%(message)s')
 logger=logging.getLogger(__name__)
 DISCORD_TOKEN=os.getenv("DISCORD_TOKEN")
@@ -14,10 +16,14 @@ KEY_OPENAI=os.getenv("OPENAI_API_KEY")
 KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY")
 SCRAPER_KEY=os.getenv("SCRAPER_API_KEY")
 OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
+
 if not DISCORD_TOKEN:print("❌ NO TOKEN!");exit(1)
+
 intents=discord.Intents.default()
 intents.message_content=True
 bot=commands.Bot(command_prefix="!",intents=intents)
+
+# === LAZY LOADERS ===
 _groq=_openai=_curl=_requests=_pd=_openpyxl=None
 def get_groq():
     global _groq
@@ -55,6 +61,8 @@ def get_openpyxl():
         import openpyxl
         _openpyxl=openpyxl
     return _openpyxl
+
+# === DATABASE ===
 class Database:
     def __init__(self,path="bot.db"):
         self.conn=sqlite3.connect(path,check_same_thread=False)
@@ -67,6 +75,8 @@ class Database:
     def stat(self,cmd,uid):self.conn.execute('INSERT INTO stats(cmd,uid)VALUES(?,?)',(cmd,uid));self.conn.commit()
     def get_stats(self):return self.conn.execute('SELECT cmd,COUNT(*)FROM stats GROUP BY cmd ORDER BY COUNT(*)DESC').fetchall()
 db=Database()
+
+# === RATE LIMITER ===
 class RL:
     def __init__(self):self.cd=defaultdict(lambda:defaultdict(float))
     def ok(self,uid,cmd,t=5):
@@ -91,6 +101,8 @@ def noban():
         if db.banned(i.user.id):await i.response.send_message("🚫 Blacklisted!",ephemeral=True);return False
         return True
     return app_commands.check(p)
+
+# === MEMORY ===
 @dataclass
 class Msg:
     role:str;content:str;ts:float
@@ -104,6 +116,8 @@ class Memory:
     def get(self,uid):return[{"role":m.role,"content":m.content}for m in self.data[uid]]
     def clear(self,uid):self.data[uid]=[]
 mem=Memory()
+
+# === FILE READER ===
 class FileReader:
     @staticmethod
     async def read(attachment)->tuple:
@@ -138,6 +152,8 @@ class FileReader:
         txt=content.decode('utf-8',errors='ignore')
         return txt[:8000],fn.split('.')[-1]if'.'in fn else'txt',{}
 freader=FileReader()
+
+# === EXCEL GENERATOR ===
 class ExcelGen:
     @staticmethod
     def generate(data)->io.BytesIO:
@@ -180,6 +196,8 @@ class ExcelGen:
         out=io.BytesIO();wb.save(out);out.seek(0)
         return out
 egen=ExcelGen()
+
+# === AI LOGIC ===
 EXCEL_PROMPT='''KAMU EXCEL EXPERT AI. ATURAN KETAT:
 1. HANYA keluarkan JSON valid, TANPA teks lain sebelum atau sesudah JSON
 2. Angka harus number (15000), bukan string ("15000")
@@ -198,160 +216,75 @@ OR_FREE={"llama":"meta-llama/llama-3.3-70b-instruct:free","gemini":"google/gemin
 
 def call_groq(msgs):
     cl=get_groq()
-    if not cl:
-        logger.info("Groq: No API key")
-        return None
+    if not cl:return None
     try:
-        logger.info("Groq: Calling...")
         r=cl.chat.completions.create(messages=msgs,model="llama-3.3-70b-versatile",temperature=0.2,max_tokens=8000)
-        resp=r.choices[0].message.content
-        logger.info(f"Groq: Success, length={len(resp)}")
-        return resp
-    except Exception as e:
-        logger.error(f"Groq: Error - {e}")
-        return None
+        return r.choices[0].message.content
+    except Exception as e:logger.warning(f"Groq:{e}");return None
 
-def call_openrouter(msgs,model_key="llama"):
-    if not KEY_OPENROUTER:
-        logger.info("OpenRouter: No API key")
-        return None
+def call_openrouter(msgs,mk="llama"):
+    if not KEY_OPENROUTER:return None
     try:
-        logger.info(f"OpenRouter ({model_key}): Calling...")
         req=get_requests()
-        model_id=OR_FREE.get(model_key,"meta-llama/llama-3.3-70b-instruct:free")
-        r=req.post("https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization":f"Bearer {KEY_OPENROUTER}","Content-Type":"application/json"},
-            json={"model":model_id,"messages":msgs,"temperature":0.2,"max_tokens":8000},
-            timeout=60)
-        if r.status_code==200:
-            resp=r.json()["choices"][0]["message"]["content"]
-            logger.info(f"OpenRouter: Success, length={len(resp)}")
-            return resp
-        else:
-            logger.error(f"OpenRouter: HTTP {r.status_code}")
-            return None
-    except Exception as e:
-        logger.error(f"OpenRouter: Error - {e}")
-        return None
+        r=req.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_OPENROUTER}","Content-Type":"application/json"},json={"model":OR_FREE.get(mk,OR_FREE["llama"]),"messages":msgs,"temperature":0.2,"max_tokens":8000},timeout=60)
+        if r.status_code==200:return r.json()["choices"][0]["message"]["content"]
+    except Exception as e:logger.warning(f"OR:{e}")
+    return None
 
 def call_gemini(prompt):
-    if not KEY_GEMINI:
-        logger.info("Gemini: No API key")
-        return None
+    if not KEY_GEMINI:return None
     try:
-        logger.info("Gemini: Calling...")
         import google.generativeai as genai
         genai.configure(api_key=KEY_GEMINI)
         for mn in["gemini-2.0-flash","gemini-1.5-pro","gemini-pro"]:
             try:
                 m=genai.GenerativeModel(mn)
                 r=m.generate_content(f"{EXCEL_PROMPT}\n\nUser:{prompt}")
-                if r and r.text:
-                    logger.info(f"Gemini ({mn}): Success")
-                    return r.text
-            except Exception as e:
-                if "429" in str(e):
-                    logger.warning(f"Gemini ({mn}): Rate limit")
-                    continue
-                elif "404" in str(e):
-                    continue
-                else:
-                    logger.error(f"Gemini ({mn}): {e}")
-                    continue
-        return None
-    except Exception as e:
-        logger.error(f"Gemini: Error - {e}")
-        return None
+                if r and r.text:return r.text
+            except:continue
+    except:pass
+    return None
 
 def call_pollinations(prompt):
     try:
-        logger.info("Pollinations: Calling...")
         req=get_requests()
-        full_prompt=f"{EXCEL_PROMPT}\n\nUser: {prompt}"
-        r=req.get(f"https://text.pollinations.ai/{quote(full_prompt[:2000])}",timeout=60)
-        if r.ok and len(r.text)>10:
-            logger.info(f"Pollinations: Success, length={len(r.text)}")
-            return r.text
-        return None
-    except Exception as e:
-        logger.error(f"Pollinations: Error - {e}")
-        return None
+        r=req.get(f"https://text.pollinations.ai/{quote(EXCEL_PROMPT+' User: '+prompt[:2000])}",timeout=60)
+        if r.ok and len(r.text)>10:return r.text
+    except:pass
+    return None
 
 def ask_ai(prompt,uid=None,model="auto"):
     msgs=[{"role":"system","content":EXCEL_PROMPT},{"role":"user","content":prompt}]
     if uid:
         history=mem.get(uid)
-        if history:
-            msgs=[{"role":"system","content":EXCEL_PROMPT}]+history+[{"role":"user","content":prompt}]
+        if history:msgs=[{"role":"system","content":EXCEL_PROMPT}]+history+[{"role":"user","content":prompt}]
     
-    result=None
-    used_model="none"
-    
-    logger.info(f"ask_ai called with model={model}")
-    
-    if model=="groq":
+    result=None;used="none"
+    if model=="groq":result=call_groq(msgs);used="Groq"
+    elif model=="gemini":result=call_gemini(prompt);used="Gemini"
+    elif model=="pollinations":result=call_pollinations(prompt);used="Pollinations"
+    elif model.startswith("or_"):result=call_openrouter(msgs,model[3:]);used=f"OR({model[3:]})"
+    else: # auto
         result=call_groq(msgs)
-        used_model="Groq"
-    elif model=="gemini":
-        result=call_gemini(prompt)
-        used_model="Gemini"
-    elif model=="pollinations":
-        result=call_pollinations(prompt)
-        used_model="Pollinations"
-    elif model.startswith("or_"):
-        mk=model[3:]
-        result=call_openrouter(msgs,mk)
-        used_model=f"OpenRouter({mk})"
-    else:  # auto
-        logger.info("Auto mode: trying Groq first...")
-        result=call_groq(msgs)
-        if result:
-            used_model="Groq"
+        if result:used="Groq"
         else:
-            logger.info("Auto mode: trying OpenRouter...")
             result=call_openrouter(msgs,"llama")
-            if result:
-                used_model="OpenRouter"
+            if result:used="OpenRouter"
             else:
-                logger.info("Auto mode: trying Gemini...")
                 result=call_gemini(prompt)
-                if result:
-                    used_model="Gemini"
+                if result:used="Gemini"
                 else:
-                    logger.info("Auto mode: trying Pollinations...")
                     result=call_pollinations(prompt)
-                    if result:
-                        used_model="Pollinations"
+                    if result:used="Pollinations"
     
-    if not result and model!="auto":
-        logger.info(f"{model} failed, trying fallbacks...")
-        for fn,name in[(lambda:call_groq(msgs),"Groq"),(lambda:call_openrouter(msgs,"llama"),"OpenRouter"),(lambda:call_pollinations(prompt),"Pollinations")]:
-            result=fn()
-            if result:
-                used_model=f"{name}(fallback)"
-                break
-    
-    if not result:
-        result='{"action":"text_only","message":"❌ Semua AI tidak tersedia saat ini."}'
-        used_model="none"
-    
-    if uid and result:
-        mem.add(uid,"user",prompt)
-        mem.add(uid,"assistant",result)
-    
-    logger.info(f"Final model used: {used_model}")
-    return result,used_model
-
-def fix_json(t):
-    t=t.strip()
-    t=re.sub(r',(\s*[}\]])',r'\1',t)
-    t=re.sub(r'"\s*\.\s*"','","',t)
-    t=t.replace("'",'"')
-    ob,cb=t.count('{'),t.count('}')
-    if ob>cb:t+='}'*(ob-cb)
-    os,cs=t.count('['),t.count(']')
-    if os>cs:t+=']'*(os-cs)
-    return t
+    if not result and model!="auto": # Fallback
+        for f,n in[(lambda:call_groq(msgs),"Groq"),(lambda:call_openrouter(msgs),"OpenRouter"),(lambda:call_pollinations(prompt),"Pollinations")]:
+            result=f()
+            if result:used=f"{n}(FB)";break
+            
+    if not result:return'{"action":"text_only","message":"❌ AI Down"}',"none"
+    if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",result)
+    return result,used
 
 def parse_ai(resp):
     resp=resp.strip()
@@ -362,13 +295,7 @@ def parse_ai(resp):
     except:pass
     try:
         m=re.search(r'(\{[\s\S]*\})',resp)
-        if m:
-            jt=m.group(1)
-            try:return json.loads(jt)
-            except:
-                jt=fix_json(jt)
-                try:return json.loads(jt)
-                except:pass
+        if m:return json.loads(m.group(1))
     except:pass
     return{"action":"text_only","message":resp}
 
@@ -377,278 +304,177 @@ def split_msg(t,lim=1900):
     ch=[];cur=""
     for l in t.split('\n'):
         if len(cur)+len(l)+1>lim:
-            if cur:ch.append(cur)
-            cur=l
+            if cur:ch.append(cur);cur=l
         else:cur+=('\n'if cur else'')+l
     if cur:ch.append(cur)
     return ch or[t[:lim]]
 
-def headers():
-    # User-Agent yang lebih lengkap dan acak
-    agents=[
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-        "Roblox/WinInet",
-        "RobloxStudio/WinInet"
-    ]
+# === HEADER SAKTI (Dari Referensi Anda) ===
+def get_executor_headers():
+    fake_place_id = random.choice(["2753915549", "6284583030", "155615604"])
+    fake_job_id = os.urandom(16).hex()
     return {
-        "User-Agent": random.choice(agents),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate, br",
+        "User-Agent": "Roblox/WinInet", 
+        "Roblox-Place-Id": fake_place_id,
+        "Roblox-Game-Id": fake_job_id,
+        "Roblox-Session-Id": os.urandom(20).hex(),
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Roblox-Place-Id": random.choice(["2753915549","155615604","4442272183"]),
-        "Roblox-Browser-Asset-Request": "false"
+        "Fingerprint": os.urandom(32).hex()
     }
 
-def valid_url(u):return u.startswith(("http://","https://"))and not any(x in u.lower()for x in["localhost","127.0.0.1","0.0.0.0"])
+def valid_url(u):return u.startswith(("http://","https://"))and not any(x in u.lower()for x in["localhost","127.0.0.1"])
 
 @bot.event
 async def on_ready():
-    logger.info(f'🔥 {bot.user}|{len(bot.guilds)} guilds')
+    logger.info(f'🔥 {bot.user} Online')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching,name="/help"))
-    try:await bot.tree.sync();logger.info("✅ Synced")
-    except Exception as e:logger.error(f"Sync:{e}")
+    await bot.tree.sync()
 
 @bot.tree.error
 async def on_error(i,e):
     try:await i.response.send_message(f"❌ {str(e)[:100]}",ephemeral=True)
     except:pass
 
-@bot.tree.command(name="ping",description="🏓 Cek status bot")
-async def ping(i:discord.Interaction):
-    e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
-    e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
-    e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="AI Keys",value=f"Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} Router{'✅'if KEY_OPENROUTER else'❌'}")
-    await i.response.send_message(embed=e)
+# === COMMANDS ===
 
-@bot.tree.command(name="help",description="📚 Panduan bot")
-async def help_cmd(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot",description="Bot untuk Excel & Script Dumper",color=0x217346)
-    e.add_field(name="🔓 /dump <url>",value="Download script dari URL",inline=False)
-    e.add_field(name="🤖 /ai <perintah> [file] [model]",value="Tanya AI / Buat Excel\n**Models:** Auto, Groq, Gemini, OpenRouter, Pollinations",inline=False)
-    e.add_field(name="🔧 /testai",value="Test koneksi semua AI",inline=False)
-    e.add_field(name="📝 Contoh",value="```/ai Buatkan invoice PT ABC model:groq\n/ai [upload.json] Convert ke Excel\n/ai Rumus hitung diskon```",inline=False)
-    e.add_field(name="🔧 Lainnya",value="`/clear` `/history` `/stats` `/reload`",inline=False)
-    await i.response.send_message(embed=e)
-
-@bot.tree.command(name="dump",description="🔓 Download script dari URL")
-@app_commands.describe(url="URL script",raw="Mode raw tanpa proxy")
+@bot.tree.command(name="dump", description="Dump script (Mode: Executor Simulation)")
+@app_commands.describe(url="URL Script")
 @rate(10)
 @noban()
-async def dump(i:discord.Interaction,url:str,raw:bool=False):
-    await i.response.defer()
-    
-    if not valid_url(url):
-        return await i.followup.send("❌ URL tidak valid!")
-    
-    try:
-        curl=get_curl()
-        req=get_requests()
-        content=""
-        method="Unknown"
-        
-        # 1. Coba ScraperAPI (Prioritas 1)
-        if not raw and SCRAPER_KEY:
-            try:
-                r=req.get('http://api.scraperapi.com',
-                         params={'api_key':SCRAPER_KEY,'url':url,'keep_headers':'true'},
-                         headers=headers(),timeout=90)
-                if r.status_code==200:
-                    content=r.text
-                    method="ScraperAPI"
-            except Exception as e:
-                logger.error(f"ScraperAPI error: {e}")
-        
-        # 2. Coba curl_cffi (Prioritas 2 / Fallback)
-        if not content:
-            try:
-                r=curl.get(url,impersonate="chrome120",headers=headers(),timeout=30)
-                if r.status_code==200:
-                    content=r.text
-                    method="Raw (curl_cffi)"
-            except Exception as e:
-                logger.error(f"Curl error: {e}")
-        
-        # 3. Coba requests biasa (Last Resort)
-        if not content:
-            try:
-                r=req.get(url,headers=headers(),timeout=30)
-                if r.status_code==200:
-                    content=r.text
-                    method="Raw (requests)"
-            except Exception as e:
-                logger.error(f"Requests error: {e}")
-        
-        if not content:
-            return await i.followup.send("❌ Gagal mengambil konten dari URL tersebut.")
-        
-        ext="lua"
-        if"<!DOCTYPE"in content[:500]or"<html"in content[:100]:
-            ext="html"
-        elif content.strip().startswith(("{","[")):
-            ext="json"
-        
-        e=discord.Embed(title=f"{'✅'if ext=='lua'else'⚠️'} Dump Complete",color=0x00FF00 if ext=="lua"else 0xFFFF00)
-        e.add_field(name="📦 Size",value=f"`{len(content):,} bytes`")
-        e.add_field(name="📄 Type",value=f"`.{ext}`")
-        e.add_field(name="🔧 Via",value=method)
-        
-        db.stat("dump",i.user.id)
-        
-        await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
-        
-    except Exception as ex:
-        await i.followup.send(f"💀 Error: `{str(ex)[:200]}`")
+async def dump(interaction: discord.Interaction, url: str):
+    await interaction.response.defer()
 
-@bot.tree.command(name="testai",description="🔧 Test koneksi semua AI")
-@owner()
-async def testai(i:discord.Interaction):
-    await i.response.defer()
-    results=[]
-    test_msgs=[{"role":"user","content":"Jawab hanya: OK"}]
-    
-    # Groq
-    r=call_groq(test_msgs)
-    results.append(f"{'✅' if r else '❌'} **Groq**: {r[:30] if r else 'Failed'}")
-    
-    # OpenRouter
-    r=call_openrouter(test_msgs,"llama")
-    results.append(f"{'✅' if r else '❌'} **OpenRouter**: {r[:30] if r else 'Failed'}")
-    
-    # Gemini
-    r=call_gemini("Jawab: OK")
-    results.append(f"{'✅' if r else '❌'} **Gemini**: {r[:30] if r else 'Failed'}")
-    
-    # Pollinations
-    r=call_pollinations("Jawab: OK")
-    results.append(f"{'✅' if r else '❌'} **Pollinations**: {r[:30] if r else 'Failed'}")
-    
-    e=discord.Embed(title="🔧 AI Test Results",description="\n".join(results),color=0x3498DB)
-    await i.followup.send(embed=e)
+    if not SCRAPER_KEY:
+        return await interaction.followup.send("❌ API Key Error")
+
+    try:
+        req = get_requests()
+        payload = {
+            'api_key': SCRAPER_KEY,
+            'url': url,
+            'keep_headers': 'true'
+        }
+        fake_headers = get_executor_headers()
+
+        response = req.get(
+            'http://api.scraperapi.com', 
+            params=payload, 
+            headers=fake_headers,
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            content = response.text
+            if "<!DOCTYPE html>" in content or "<html" in content[:100]:
+                file_ext = "html"
+                status_text = "⚠️ **Peringatan:** Target mendeteksi bot dan mengirim Halaman Web."
+            else:
+                file_ext = "lua"
+                status_text = "✅ **Sukses!** Target mengira ini Executor Asli."
+
+            file_data = io.BytesIO(content.encode("utf-8"))
+            
+            db.stat("dump", interaction.user.id)
+            await interaction.followup.send(
+                content=f"{status_text}\nSize: `{len(content)} bytes`",
+                file=discord.File(file_data, filename=f"Dump_Result.{file_ext}")
+            )
+        else:
+            await interaction.followup.send(f"❌ Gagal: {response.status_code}")
+
+    except Exception as e:
+        await interaction.followup.send(f"💀 Error: {str(e)}")
 
 @bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
-@app_commands.describe(perintah="Perintah untuk AI",file="Upload file",model="Pilih AI model")
+@app_commands.describe(perintah="Perintah untuk AI",file="Upload file",model="Pilih AI")
 @app_commands.choices(model=[
-    app_commands.Choice(name="🚀 Auto (Recommended)",value="auto"),
-    app_commands.Choice(name="⚡ Groq (Fast)",value="groq"),
+    app_commands.Choice(name="🚀 Auto",value="auto"),
+    app_commands.Choice(name="⚡ Groq",value="groq"),
     app_commands.Choice(name="🧠 Gemini",value="gemini"),
-    app_commands.Choice(name="🦙 OpenRouter Llama",value="or_llama"),
-    app_commands.Choice(name="🔵 OpenRouter Gemini",value="or_gemini"),
+    app_commands.Choice(name="🟣 Llama (Router)",value="or_llama"),
+    app_commands.Choice(name="🔵 Gemini (Router)",value="or_gemini"),
     app_commands.Choice(name="🌺 Pollinations",value="pollinations")])
 @rate(10)
 @noban()
 async def ai_cmd(i:discord.Interaction,perintah:str,file:discord.Attachment=None,model:str="auto"):
     await i.response.defer()
-    
-    logger.info(f"AI command: model={model}, prompt={perintah[:50]}...")
-    
     try:
         parts=[perintah]
         if file:
             fc,ft,meta=await freader.read(file)
-            parts.append(f"\n\n=== FILE: {file.filename} ({ft}) ===\n{json.dumps(meta,ensure_ascii=False)}\n\n{fc}")
-        
-        prompt='\n'.join(parts)
-        resp,used=ask_ai(prompt,i.user.id,model)
-        
-        logger.info(f"AI response received from {used}, length={len(resp)}")
-        
+            parts.append(f"\n\nFile: {file.filename}\n{fc}")
+        resp,used=ask_ai('\n'.join(parts),i.user.id,model)
         parsed=parse_ai(resp)
-        action=parsed.get("action","text_only")
-        msg=parsed.get("message","")
-        
-        db.log(i.user.id,i.guild_id,"ai",perintah[:500],msg[:500])
-        db.stat("ai",i.user.id)
-        
-        if action=="generate_excel":
-            ed=parsed.get("excel_data",{})
-            fn=ed.get("filename","output.xlsx")
-            if not fn.endswith('.xlsx'):fn+='.xlsx'
-            try:
-                ef=egen.generate(ed)
-                e=discord.Embed(title="📊 Excel Created!",color=0x217346)
-                e.add_field(name="📄 File",value=f"`{fn}`",inline=True)
-                e.add_field(name="🤖 Model",value=f"`{used}`",inline=True)
-                sheets=ed.get("sheets",[])
-                if sheets:e.add_field(name="📊 Rows",value=f"`{sum(len(s.get('data',[]))for s in sheets)}`",inline=True)
-                if msg:e.add_field(name="💬 Info",value=msg[:400],inline=False)
-                await i.followup.send(embed=e,file=discord.File(ef,fn))
-            except Exception as ex:
-                logger.error(f"Excel generation error: {ex}")
-                await i.followup.send(f"⚠️ Excel error: `{ex}`\n\nRaw response:\n```json\n{resp[:1000]}```")
+        if parsed.get("action")=="generate_excel":
+            ed=parsed["excel_data"]
+            ef=egen.generate(ed)
+            await i.followup.send(content=f"✅ Excel via **{used}**",file=discord.File(ef,ed.get("filename","data.xlsx")))
         else:
-            if not msg:msg=resp
-            e=discord.Embed(title="🤖 AI Response",color=0x5865F2)
-            e.set_footer(text=f"Model: {used}")
+            msg=parsed.get("message",resp)
             ch=split_msg(msg)
-            await i.followup.send(embed=e,content=ch[0])
+            await i.followup.send(content=ch[0])
             for c in ch[1:]:await i.channel.send(c)
-    except Exception as ex:
-        logger.error(f"AI command error: {ex}")
-        await i.followup.send(f"❌ Error: `{str(ex)[:200]}`")
-
-@bot.tree.command(name="clear",description="🧹 Hapus memory chat")
-async def clear_cmd(i:discord.Interaction):
-    mem.clear(i.user.id)
-    await i.response.send_message("🧹 Memory dihapus!",ephemeral=True)
-
-@bot.tree.command(name="history",description="📜 Lihat history chat")
-@app_commands.describe(limit="Jumlah (max 10)")
-async def history_cmd(i:discord.Interaction,limit:int=5):
-    h=db.hist(i.user.id,min(limit,10))
-    if not h:return await i.response.send_message("📭 History kosong.",ephemeral=True)
-    e=discord.Embed(title="📜 Chat History",color=0x3498DB)
-    for idx,(p,r)in enumerate(h,1):e.add_field(name=f"{idx}. {p[:35]}...",value=f"```{r[:70]}...```",inline=False)
-    await i.response.send_message(embed=e,ephemeral=True)
-
-@bot.tree.command(name="stats",description="📊 Statistik bot (Owner)")
-@owner()
-async def stats_cmd(i:discord.Interaction):
-    st=db.get_stats()
-    e=discord.Embed(title="📊 Bot Stats",color=0x3498DB)
-    e.add_field(name="🌐 Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="👥 Users",value=f"`{sum(g.member_count or 0 for g in bot.guilds):,}`")
-    if st:e.add_field(name="📈 Usage",value="\n".join([f"`{c}`: {n}x"for c,n in st[:8]]),inline=False)
-    await i.response.send_message(embed=e)
-
-@bot.tree.command(name="blacklist",description="🚫 Ban user (Owner)")
-@owner()
-@app_commands.describe(user="User target",reason="Alasan")
-async def bl_cmd(i:discord.Interaction,user:discord.User,reason:str="No reason"):
-    db.ban(user.id,reason,i.user.id)
-    await i.response.send_message(f"🚫 **{user}** di-blacklist: {reason}")
-
-@bot.tree.command(name="unblacklist",description="✅ Unban user (Owner)")
-@owner()
-@app_commands.describe(user="User target")
-async def ubl_cmd(i:discord.Interaction,user:discord.User):
-    db.unban(user.id)
-    await i.response.send_message(f"✅ **{user}** di-unblacklist")
-
-@bot.tree.command(name="reload",description="🔄 Sync commands (Owner)")
-@owner()
-async def reload_cmd(i:discord.Interaction):
-    await i.response.defer()
-    try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)} commands synced!")
     except Exception as e:await i.followup.send(f"❌ Error: {e}")
 
+@bot.tree.command(name="ping",description="🏓 Cek status")
+async def ping(i:discord.Interaction):
+    await i.response.send_message(f"🏓 Pong! `{round(bot.latency*1000)}ms`")
+
+@bot.tree.command(name="help",description="📚 Panduan")
+async def help(i:discord.Interaction):
+    e=discord.Embed(title="📚 Bot Help",color=0x2ECC71)
+    e.add_field(name="🔓 /dump",value="Executor Simulation Dump",inline=False)
+    e.add_field(name="🤖 /ai",value="Excel & Tanya Jawab AI",inline=False)
+    e.add_field(name="🔧 /testai",value="Test Koneksi AI",inline=False)
+    await i.response.send_message(embed=e)
+
+@bot.tree.command(name="testai",description="🔧 Test AI")
+@owner()
+async def testai(i:discord.Interaction):
+    await i.response.defer()
+    res=[]
+    try:
+        c=get_groq()
+        if c:c.chat.completions.create(messages=[{"role":"user","content":"OK"}],model="llama-3.3-70b-versatile",max_tokens=5);res.append("✅ Groq")
+        else:res.append("❌ Groq")
+    except:res.append("❌ Groq Error")
+    try:
+        if call_gemini("OK"):res.append("✅ Gemini")
+        else:res.append("❌ Gemini")
+    except:res.append("❌ Gemini Error")
+    try:
+        if call_openrouter([{"role":"user","content":"OK"}],"llama"):res.append("✅ OpenRouter")
+        else:res.append("❌ OpenRouter")
+    except:res.append("❌ OpenRouter Error")
+    try:
+        if call_pollinations("OK"):res.append("✅ Pollinations")
+        else:res.append("❌ Pollinations")
+    except:res.append("❌ Pollinations Error")
+    await i.followup.send("\n".join(res))
+
+@bot.tree.command(name="clear",description="🧹 Clear Memory")
+async def clear(i:discord.Interaction):mem.clear(i.user.id);await i.response.send_message("🧹 Done",ephemeral=True)
+
+@bot.tree.command(name="history",description="📜 History")
+async def history(i:discord.Interaction):
+    h=db.hist(i.user.id)
+    if not h:return await i.response.send_message("📭 Empty",ephemeral=True)
+    await i.response.send_message(f"📜 Last 5:\n"+"\n".join([f"- {p[:30]}..."for p,r in h]),ephemeral=True)
+
+@bot.tree.command(name="stats",description="📊 Stats")
+@owner()
+async def stats(i:discord.Interaction):
+    st=db.get_stats()
+    await i.response.send_message(f"📊 Stats:\n"+"\n".join([f"`{c}`: {n}"for c,n in st]))
+
+@bot.tree.command(name="reload",description="🔄 Reload")
+@owner()
+async def reload(i:discord.Interaction):
+    await bot.tree.sync()
+    await i.response.send_message("✅ Synced")
+
 if __name__=="__main__":
     keep_alive()
-    time.sleep(1)
-    print("🚀 Excel AI Bot Starting...")
-    print(f"📦 Keys: Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} OpenRouter{'✅'if KEY_OPENROUTER else'❌'}")
-    try:bot.run(DISCORD_TOKEN,log_handler=None)
-    except discord.LoginFailure:print("❌ Invalid Token!")
-    except Exception as e:print(f"❌ {e}")
-if __name__=="__main__":
-    keep_alive()
-    time.sleep(1)
-    print("🚀 Excel AI Bot Starting...")
-    print(f"📦 Keys: Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} OpenRouter{'✅'if KEY_OPENROUTER else'❌'}")
-    try:bot.run(DISCORD_TOKEN,log_handler=None)
-    except discord.LoginFailure:print("❌ Invalid Token!")
-    except Exception as e:print(f"❌ {e}")
+    bot.run(DISCORD_TOKEN,log_handler=None)
