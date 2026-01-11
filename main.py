@@ -1,4 +1,4 @@
-import discord,os,io,re,time,json,logging,sqlite3
+import discord,os,io,re,time,json,logging,sqlite3,random
 from collections import defaultdict
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -110,13 +110,13 @@ class FileReader:
         fn=attachment.filename.lower()
         content=await attachment.read()
         try:
-            if fn.endswith(('.xlsx','.xls')):return FileReader._excel(content)
+            if fn.endswith(('.xlsx','.xls')):return FileReader._excel(content,fn)
             elif fn.endswith('.csv'):return FileReader._csv(content)
             elif fn.endswith('.json'):return FileReader._json(content)
             else:return FileReader._text(content,fn)
         except Exception as e:return f"Error: {e}","error",{}
     @staticmethod
-    def _excel(content):
+    def _excel(content,fn):
         pd=get_pandas()
         sheets=pd.read_excel(io.BytesIO(content),sheet_name=None)
         result=[];meta={"sheets":[],"rows":0}
@@ -132,7 +132,7 @@ class FileReader:
     @staticmethod
     def _json(content):
         data=json.loads(content.decode('utf-8',errors='ignore'))
-        return json.dumps(data,indent=2,ensure_ascii=False)[:8000],"json",{"type":type(data).__name__}
+        return f"JSON:\n{json.dumps(data,indent=2,ensure_ascii=False)[:8000]}","json",{"type":type(data).__name__}
     @staticmethod
     def _text(content,fn):
         txt=content.decode('utf-8',errors='ignore')
@@ -162,7 +162,7 @@ class ExcelGen:
                     c=ws.cell(row=ri,column=ci,value=val);c.border=border
                     if isinstance(val,(int,float))and abs(val)>=1000:c.number_format='#,##0'
             for ref,f in formulas.items():
-                try:ws[ref]=f;ws[ref].border=border
+                try:ws[ref]=f;ws[ref].border=border;ws[ref].alignment=Alignment(horizontal='right')
                 except:pass
             summary=sh.get("summary",{})
             if summary and rows:
@@ -267,7 +267,6 @@ def call_pollinations(prompt):
     try:
         logger.info("Pollinations: Calling...")
         req=get_requests()
-        # Pollinations dengan system prompt yang lebih strict
         full_prompt=f"{EXCEL_PROMPT}\n\nUser: {prompt}"
         r=req.get(f"https://text.pollinations.ai/{quote(full_prompt[:2000])}",timeout=60)
         if r.ok and len(r.text)>10:
@@ -279,7 +278,6 @@ def call_pollinations(prompt):
         return None
 
 def ask_ai(prompt,uid=None,model="auto"):
-    """Main AI function with proper model selection"""
     msgs=[{"role":"system","content":EXCEL_PROMPT},{"role":"user","content":prompt}]
     if uid:
         history=mem.get(uid)
@@ -291,7 +289,6 @@ def ask_ai(prompt,uid=None,model="auto"):
     
     logger.info(f"ask_ai called with model={model}")
     
-    # Direct model selection
     if model=="groq":
         result=call_groq(msgs)
         used_model="Groq"
@@ -305,8 +302,7 @@ def ask_ai(prompt,uid=None,model="auto"):
         mk=model[3:]
         result=call_openrouter(msgs,mk)
         used_model=f"OpenRouter({mk})"
-    else:  # auto mode
-        # Try in order: Groq -> OpenRouter -> Gemini -> Pollinations
+    else:  # auto
         logger.info("Auto mode: trying Groq first...")
         result=call_groq(msgs)
         if result:
@@ -327,7 +323,6 @@ def ask_ai(prompt,uid=None,model="auto"):
                     if result:
                         used_model="Pollinations"
     
-    # If still no result after direct selection, try fallbacks
     if not result and model!="auto":
         logger.info(f"{model} failed, trying fallbacks...")
         for fn,name in[(lambda:call_groq(msgs),"Groq"),(lambda:call_openrouter(msgs,"llama"),"OpenRouter"),(lambda:call_pollinations(prompt),"Pollinations")]:
@@ -340,7 +335,6 @@ def ask_ai(prompt,uid=None,model="auto"):
         result='{"action":"text_only","message":"❌ Semua AI tidak tersedia saat ini."}'
         used_model="none"
     
-    # Save to memory
     if uid and result:
         mem.add(uid,"user",prompt)
         mem.add(uid,"assistant",result)
@@ -361,15 +355,11 @@ def fix_json(t):
 
 def parse_ai(resp):
     resp=resp.strip()
-    # Remove markdown code blocks
     if resp.startswith('```'):
         m=re.search(r'```(?:json)?\s*([\s\S]*?)\s*```',resp)
         if m:resp=m.group(1).strip()
-    # Try direct parse
-    try:
-        return json.loads(resp)
+    try:return json.loads(resp)
     except:pass
-    # Try to find JSON object
     try:
         m=re.search(r'(\{[\s\S]*\})',resp)
         if m:
@@ -380,7 +370,6 @@ def parse_ai(resp):
                 try:return json.loads(jt)
                 except:pass
     except:pass
-    # Return as text
     return{"action":"text_only","message":resp}
 
 def split_msg(t,lim=1900):
@@ -394,7 +383,26 @@ def split_msg(t,lim=1900):
     if cur:ch.append(cur)
     return ch or[t[:lim]]
 
-def headers():return{"User-Agent":"Roblox/WinInet","Roblox-Place-Id":"2753915549","Accept-Encoding":"gzip,deflate,br"}
+def headers():
+    # User-Agent yang lebih lengkap dan acak
+    agents=[
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+        "Roblox/WinInet",
+        "RobloxStudio/WinInet"
+    ]
+    return {
+        "User-Agent": random.choice(agents),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Roblox-Place-Id": random.choice(["2753915549","155615604","4442272183"]),
+        "Roblox-Browser-Asset-Request": "false"
+    }
+
 def valid_url(u):return u.startswith(("http://","https://"))and not any(x in u.lower()for x in["localhost","127.0.0.1","0.0.0.0"])
 
 @bot.event
@@ -433,21 +441,68 @@ async def help_cmd(i:discord.Interaction):
 @noban()
 async def dump(i:discord.Interaction,url:str,raw:bool=False):
     await i.response.defer()
-    if not valid_url(url):return await i.followup.send("❌ URL tidak valid!")
+    
+    if not valid_url(url):
+        return await i.followup.send("❌ URL tidak valid!")
+    
     try:
-        curl=get_curl();req=get_requests()
-        if raw or not SCRAPER_KEY:c=curl.get(url,impersonate="chrome120",headers=headers(),timeout=30).text;m="Raw"
-        else:c=req.get('http://api.scraperapi.com',params={'api_key':SCRAPER_KEY,'url':url,'keep_headers':'true'},headers=headers(),timeout=90).text;m="Scraper"
+        curl=get_curl()
+        req=get_requests()
+        content=""
+        method="Unknown"
+        
+        # 1. Coba ScraperAPI (Prioritas 1)
+        if not raw and SCRAPER_KEY:
+            try:
+                r=req.get('http://api.scraperapi.com',
+                         params={'api_key':SCRAPER_KEY,'url':url,'keep_headers':'true'},
+                         headers=headers(),timeout=90)
+                if r.status_code==200:
+                    content=r.text
+                    method="ScraperAPI"
+            except Exception as e:
+                logger.error(f"ScraperAPI error: {e}")
+        
+        # 2. Coba curl_cffi (Prioritas 2 / Fallback)
+        if not content:
+            try:
+                r=curl.get(url,impersonate="chrome120",headers=headers(),timeout=30)
+                if r.status_code==200:
+                    content=r.text
+                    method="Raw (curl_cffi)"
+            except Exception as e:
+                logger.error(f"Curl error: {e}")
+        
+        # 3. Coba requests biasa (Last Resort)
+        if not content:
+            try:
+                r=req.get(url,headers=headers(),timeout=30)
+                if r.status_code==200:
+                    content=r.text
+                    method="Raw (requests)"
+            except Exception as e:
+                logger.error(f"Requests error: {e}")
+        
+        if not content:
+            return await i.followup.send("❌ Gagal mengambil konten dari URL tersebut.")
+        
         ext="lua"
-        if"<!DOCTYPE"in c[:500]:ext="html"
-        elif c.strip().startswith(("{","[")):ext="json"
-        e=discord.Embed(title=f"{'✅'if ext=='lua'else'⚠️'} Dump",color=0x00FF00 if ext=="lua"else 0xFFFF00)
-        e.add_field(name="📦 Size",value=f"`{len(c):,} bytes`")
+        if"<!DOCTYPE"in content[:500]or"<html"in content[:100]:
+            ext="html"
+        elif content.strip().startswith(("{","[")):
+            ext="json"
+        
+        e=discord.Embed(title=f"{'✅'if ext=='lua'else'⚠️'} Dump Complete",color=0x00FF00 if ext=="lua"else 0xFFFF00)
+        e.add_field(name="📦 Size",value=f"`{len(content):,} bytes`")
         e.add_field(name="📄 Type",value=f"`.{ext}`")
-        e.add_field(name="🔧 Via",value=m)
+        e.add_field(name="🔧 Via",value=method)
+        
         db.stat("dump",i.user.id)
-        await i.followup.send(embed=e,file=discord.File(io.BytesIO(c.encode()),f"dump.{ext}"))
-    except Exception as ex:await i.followup.send(f"💀 Error: `{str(ex)[:200]}`")
+        
+        await i.followup.send(embed=e,file=discord.File(io.BytesIO(content.encode()),f"dump.{ext}"))
+        
+    except Exception as ex:
+        await i.followup.send(f"💀 Error: `{str(ex)[:200]}`")
 
 @bot.tree.command(name="testai",description="🔧 Test koneksi semua AI")
 @owner()
@@ -581,6 +636,14 @@ async def reload_cmd(i:discord.Interaction):
     try:s=await bot.tree.sync();await i.followup.send(f"✅ {len(s)} commands synced!")
     except Exception as e:await i.followup.send(f"❌ Error: {e}")
 
+if __name__=="__main__":
+    keep_alive()
+    time.sleep(1)
+    print("🚀 Excel AI Bot Starting...")
+    print(f"📦 Keys: Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} OpenRouter{'✅'if KEY_OPENROUTER else'❌'}")
+    try:bot.run(DISCORD_TOKEN,log_handler=None)
+    except discord.LoginFailure:print("❌ Invalid Token!")
+    except Exception as e:print(f"❌ {e}")
 if __name__=="__main__":
     keep_alive()
     time.sleep(1)
