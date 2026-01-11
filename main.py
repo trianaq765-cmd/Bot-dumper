@@ -12,13 +12,14 @@ DISCORD_TOKEN=os.getenv("DISCORD_TOKEN")
 KEY_GROQ=os.getenv("GROQ_API_KEY")
 KEY_GEMINI=os.getenv("GEMINI_API_KEY")
 KEY_OPENAI=os.getenv("OPENAI_API_KEY")
+KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY")
 SCRAPER_KEY=os.getenv("SCRAPER_API_KEY")
 OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
 if not DISCORD_TOKEN:print("❌ NO TOKEN!");exit(1)
 intents=discord.Intents.default()
 intents.message_content=True
 bot=commands.Bot(command_prefix="!",intents=intents)
-_groq=_openai=_genai=_curl=_requests=_pd=_openpyxl=None
+_groq=_openai=_genai=_openrouter=_curl=_requests=_pd=_openpyxl=None
 def get_groq():
     global _groq
     if _groq is None and KEY_GROQ:
@@ -31,6 +32,12 @@ def get_openai():
         from openai import OpenAI
         _openai=OpenAI(api_key=KEY_OPENAI)
     return _openai
+def get_openrouter():
+    global _openrouter
+    if _openrouter is None and KEY_OPENROUTER:
+        from openai import OpenAI
+        _openrouter=OpenAI(base_url="https://openrouter.ai/api/v1",api_key=KEY_OPENROUTER)
+    return _openrouter
 def get_genai():
     global _genai
     if _genai is None and KEY_GEMINI:
@@ -183,24 +190,16 @@ class ExcelGen:
                     if isinstance(nf,dict)and cl in nf:c.number_format=nf[cl]
                     elif isinstance(val,(int,float))and val>=1000:c.number_format='#,##0'
             for ref,f in formulas.items():
-                try:
-                    ws[ref]=f
-                    ws[ref].border=border
-                    ws[ref].alignment=Alignment(horizontal='right')
+                try:ws[ref]=f;ws[ref].border=border;ws[ref].alignment=Alignment(horizontal='right')
                 except:pass
             summary=sh.get("summary",{})
             if summary and rows:
-                lr=len(rows)+1
-                sr=lr+1
+                lr=len(rows)+1;sr=lr+1
                 sf=summary.get("formulas",{})
                 if isinstance(sf,dict):
                     for cl,f in sf.items():
                         af=str(f).replace("{last}",str(lr))
-                        try:
-                            ws[f"{cl}{sr}"]=af
-                            ws[f"{cl}{sr}"].font=Font(bold=True)
-                            ws[f"{cl}{sr}"].border=border
-                            ws[f"{cl}{sr}"].number_format='#,##0'
+                        try:ws[f"{cl}{sr}"]=af;ws[f"{cl}{sr}"].font=Font(bold=True);ws[f"{cl}{sr}"].border=border;ws[f"{cl}{sr}"].number_format='#,##0'
                         except:pass
             for ci in range(1,max(len(headers),max((len(r)if isinstance(r,list)else 1 for r in rows),default=1))+1):
                 cl=get_column_letter(ci)
@@ -210,9 +209,7 @@ class ExcelGen:
                     if isinstance(r,list)and ci<=len(r):max_len=max(max_len,len(str(r[ci-1]))+2)
                 ws.column_dimensions[cl].width=min(max(max_len,12),60)
             ws.freeze_panes='A2'
-        out=io.BytesIO()
-        wb.save(out)
-        out.seek(0)
+        out=io.BytesIO();wb.save(out);out.seek(0)
         return out
 egen=ExcelGen()
 EXCEL_PROMPT='''KAMU ADALAH EXCEL EXPERT AI. WAJIB PATUHI ATURAN INI:
@@ -232,14 +229,26 @@ Jika perlu GENERATE Excel:
 Jika hanya JAWAB pertanyaan:
 {"action":"text_only","message":"jawaban lengkap"}
 
-📊 RUMUS EXCEL TERSEDIA:
-SUM, AVERAGE, COUNT, MAX, MIN, IF, VLOOKUP, HLOOKUP, INDEX, MATCH, SUMIF, COUNTIF, SUMIFS, COUNTIFS, LEFT, RIGHT, MID, LEN, TRIM, CONCATENATE, TEXT, DATE, TODAY, NOW, PMT, FV, PV, ROUND, IFERROR, AND, OR
+📊 RUMUS EXCEL: SUM,AVERAGE,COUNT,MAX,MIN,IF,VLOOKUP,HLOOKUP,INDEX,MATCH,SUMIF,COUNTIF,SUMIFS,COUNTIFS,LEFT,RIGHT,MID,LEN,TRIM,CONCATENATE,TEXT,DATE,TODAY,NOW,PMT,FV,PV,ROUND,IFERROR,AND,OR
 
 🇮🇩 Jawab dalam Bahasa Indonesia.'''
-def ask_ai_select(prompt,uid=None,model_choice="auto"):
+
+# OpenRouter Models
+OR_MODELS={
+    "claude":"anthropic/claude-3.5-sonnet",
+    "gpt4":"openai/gpt-4o-2024-11-20",
+    "llama":"meta-llama/llama-3.3-70b-instruct",
+    "gemini":"google/gemini-2.0-flash-exp:free",
+    "mistral":"mistralai/mistral-large-2411",
+    "qwen":"qwen/qwen-2.5-72b-instruct",
+    "deepseek":"deepseek/deepseek-chat"
+}
+
+def ask_ai_select(prompt,uid=None,model_choice="auto",or_model="claude"):
     msgs=[{"role":"system","content":EXCEL_PROMPT}]
     if uid:msgs.extend(mem.get(uid))
     msgs.append({"role":"user","content":prompt})
+    
     def try_groq():
         cl=get_groq()
         if not cl:return None,None
@@ -249,6 +258,7 @@ def ask_ai_select(prompt,uid=None,model_choice="auto"):
             if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",resp)
             return resp,"Groq"
         except Exception as e:logger.warning(f"Groq:{e}");return None,None
+    
     def try_openai():
         cl=get_openai()
         if not cl:return None,None
@@ -258,6 +268,24 @@ def ask_ai_select(prompt,uid=None,model_choice="auto"):
             if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",resp)
             return resp,"OpenAI"
         except Exception as e:logger.warning(f"OpenAI:{e}");return None,None
+    
+    def try_openrouter(model_key="claude"):
+        cl=get_openrouter()
+        if not cl:return None,None
+        model_id=OR_MODELS.get(model_key,OR_MODELS["claude"])
+        try:
+            r=cl.chat.completions.create(
+                model=model_id,
+                messages=msgs,
+                temperature=0.2,
+                max_tokens=8000,
+                extra_headers={"HTTP-Referer":"https://discord.com","X-Title":"Excel AI Bot"}
+            )
+            resp=r.choices[0].message.content
+            if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",resp)
+            return resp,f"OR:{model_key}"
+        except Exception as e:logger.warning(f"OpenRouter:{e}");return None,None
+    
     def try_gemini():
         g=get_genai()
         if not g:return None,None
@@ -268,6 +296,7 @@ def ask_ai_select(prompt,uid=None,model_choice="auto"):
             if uid:mem.add(uid,"user",prompt);mem.add(uid,"assistant",r.text)
             return r.text,"Gemini"
         except Exception as e:logger.warning(f"Gemini:{e}");return None,None
+    
     def try_poll():
         try:
             req=get_requests()
@@ -278,6 +307,8 @@ def ask_ai_select(prompt,uid=None,model_choice="auto"):
                 return r.text,"Pollinations"
         except:pass
         return None,None
+    
+    # Model selection
     if model_choice=="groq":
         r,m=try_groq();return(r,m)if r else('{"action":"text_only","message":"❌ Groq tidak tersedia."}',"none")
     elif model_choice=="openai":
@@ -286,11 +317,15 @@ def ask_ai_select(prompt,uid=None,model_choice="auto"):
         r,m=try_gemini();return(r,m)if r else('{"action":"text_only","message":"❌ Gemini tidak tersedia."}',"none")
     elif model_choice=="pollinations":
         r,m=try_poll();return(r,m)if r else('{"action":"text_only","message":"❌ Pollinations tidak tersedia."}',"none")
-    else:
-        for fn in[try_groq,try_openai,try_gemini,try_poll]:
+    elif model_choice.startswith("or_"):
+        or_key=model_choice.replace("or_","")
+        r,m=try_openrouter(or_key);return(r,m)if r else('{"action":"text_only","message":"❌ OpenRouter tidak tersedia."}',"none")
+    else:  # auto
+        for fn in[try_groq,lambda:try_openrouter("claude"),try_openai,try_gemini,try_poll]:
             r,m=fn()
             if r:return r,m
         return'{"action":"text_only","message":"❌ Semua AI tidak tersedia."}',"none"
+
 def fix_json(text):
     text=text.strip()
     text=re.sub(r',(\s*[}\]])',r'\1',text)
@@ -346,14 +381,14 @@ async def ping(i:discord.Interaction):
     e=discord.Embed(title="🏓 Pong!",color=0x00FF00)
     e.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`")
     e.add_field(name="Servers",value=f"`{len(bot.guilds)}`")
-    e.add_field(name="AI",value=f"G{'✅'if KEY_GROQ else'❌'} O{'✅'if KEY_OPENAI else'❌'} M{'✅'if KEY_GEMINI else'❌'}")
+    e.add_field(name="AI",value=f"G{'✅'if KEY_GROQ else'❌'} O{'✅'if KEY_OPENAI else'❌'} M{'✅'if KEY_GEMINI else'❌'} R{'✅'if KEY_OPENROUTER else'❌'}")
     await i.response.send_message(embed=e)
 @bot.tree.command(name="help",description="📚 Panduan bot")
 async def help_cmd(i:discord.Interaction):
-    e=discord.Embed(title="📚 Excel AI Bot",description="Bot AI untuk Excel & Script Dumper",color=0x217346)
-    e.add_field(name="🔓 /dump <url>",value="Download script dari URL",inline=False)
-    e.add_field(name="🤖 /ai <perintah> [file] [model]",value="Interaksi dengan AI:\n• Buat Excel dari deskripsi\n• Upload & perbaiki file\n• Convert JSON/CSV ke Excel\n• Tanya rumus Excel\n\n**Model:** Auto, Groq, OpenAI, Gemini, Pollinations",inline=False)
-    e.add_field(name="📝 Contoh",value="```/ai Buatkan invoice untuk PT ABC\n/ai Rumus diskon bertingkat\n/ai [file.json] Convert ke Excel```",inline=False)
+    e=discord.Embed(title="📚 Excel AI Bot",description="Bot AI untuk Excel & Script",color=0x217346)
+    e.add_field(name="🔓 /dump <url>",value="Download script",inline=False)
+    e.add_field(name="🤖 /ai <perintah> [file] [model]",value="Tanya AI / Buat Excel\n\n**Model Tersedia:**\n• Auto, Groq, OpenAI, Gemini\n• OpenRouter: Claude, GPT-4, Llama, Mistral, Qwen, DeepSeek",inline=False)
+    e.add_field(name="📝 Contoh",value="```/ai Buatkan invoice PT ABC\n/ai [file.json] Convert ke Excel\n/ai Rumus diskon bertingkat model:or_claude```",inline=False)
     e.add_field(name="🔧 Lainnya",value="`/clear` `/history` `/stats` `/reload`",inline=False)
     await i.response.send_message(embed=e)
 @bot.tree.command(name="dump",description="🔓 Download script")
@@ -378,12 +413,18 @@ async def dump(i:discord.Interaction,url:str,raw:bool=False):
         await i.followup.send(embed=e,file=discord.File(io.BytesIO(c.encode()),f"dump.{ext}"))
     except Exception as ex:await i.followup.send(f"💀 {str(ex)[:200]}")
 @bot.tree.command(name="ai",description="🤖 Tanya AI / Buat Excel")
-@app_commands.describe(perintah="Perintah untuk AI",file="Upload file",model="Pilih AI")
+@app_commands.describe(perintah="Perintah untuk AI",file="Upload file",model="Pilih AI model")
 @app_commands.choices(model=[
     app_commands.Choice(name="🚀 Auto (Tercepat)",value="auto"),
     app_commands.Choice(name="⚡ Groq (Llama 3.3)",value="groq"),
     app_commands.Choice(name="🤖 OpenAI (GPT-4o)",value="openai"),
     app_commands.Choice(name="🧠 Gemini (2.0 Flash)",value="gemini"),
+    app_commands.Choice(name="🟣 Claude 3.5 Sonnet",value="or_claude"),
+    app_commands.Choice(name="🟢 GPT-4o (Router)",value="or_gpt4"),
+    app_commands.Choice(name="🦙 Llama 3.3 70B",value="or_llama"),
+    app_commands.Choice(name="🌀 Mistral Large",value="or_mistral"),
+    app_commands.Choice(name="🔮 Qwen 2.5 72B",value="or_qwen"),
+    app_commands.Choice(name="🌊 DeepSeek Chat",value="or_deepseek"),
     app_commands.Choice(name="🌺 Pollinations (Free)",value="pollinations")])
 @rate(10)
 @noban()
@@ -472,7 +513,7 @@ if __name__=="__main__":
     keep_alive()
     time.sleep(1)
     print(f"🚀 Excel AI Bot Starting...")
-    print(f"📦 Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'}")
+    print(f"📦 Groq{'✅'if KEY_GROQ else'❌'} OpenAI{'✅'if KEY_OPENAI else'❌'} Gemini{'✅'if KEY_GEMINI else'❌'} OpenRouter{'✅'if KEY_OPENROUTER else'❌'}")
     try:bot.run(DISCORD_TOKEN,log_handler=None)
     except discord.LoginFailure:print("❌ Invalid Token!")
     except Exception as e:print(f"❌ {e}")
