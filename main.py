@@ -152,35 +152,36 @@ class Memory:
   with s.lock:s.data[uid]=[]
 mem=Memory()
 SYSTEM_PROMPT='Kamu adalah AI Assistant yang helpful dan friendly. Jawab dalam Bahasa Indonesia kecuali diminta lain.'
-OR_MODELS={"or_llama":"meta-llama/llama-3.3-70b-instruct:free","or_gemini":"google/gemini-2.0-flash-thinking-exp:free","or_qwen":"qwen/qwen-2.5-coder-32b-instruct:free","or_deepseek":"deepseek/deepseek-r1:free","or_mistral":"mistralai/mistral-small-24b-instruct-2501:free"}
+# Updated 2024-2025 Model Strings
+OR_MODELS={"or_llama":"meta-llama/llama-3.3-70b-instruct:free","or_gemini":"google/gemini-2.0-flash-exp:free","or_qwen":"qwen/qwen-2.5-72b-instruct:free","or_deepseek":"deepseek/deepseek-chat:free","or_mistral":"mistralai/mistral-nemo:free"}
 POLL_TEXT={"p_gpt5":"openai","p_claude":"claude","p_gemini":"gemini","p_deepseek":"deepseek","p_grok":"grok","p_perplexity":"perplexity-fast"}
 POLL_IMG={"flux":"flux","sdxl":"turbo","gpt_img":"gptimage","dream":"seedream"}
 FREE_MODELS=["groq","cerebras","cohere","cloudflare","sambanova","together","mistral","moonshot","huggingface","replicate","tavily","poll_free","or_gemini","or_llama","or_qwen","or_deepseek","or_mistral"]
 PREMIUM_MODELS=["p_gpt5","p_claude","p_gemini","p_deepseek","p_grok","p_perplexity"]
 MODEL_INFO={
- "groq":("⚡","Groq","Llama 3.3 70B Fast","free"),
+ "groq":("⚡","Groq","Llama 3.3 70B","free"),
  "cerebras":("🧠","Cerebras","Llama 3.3 70B","free"),
  "cohere":("🔷","Cohere","Command R+","free"),
  "cloudflare":("☁️","Cloudflare","Llama 3.3 70B","free"),
  "sambanova":("🦣","SambaNova","Llama 3.3 70B","free"),
  "together":("🤝","Together","Llama 3.3 Turbo","free"),
  "mistral":("Ⓜ️","Mistral","Mistral Large","free"),
- "moonshot":("🌙","Moonshot/Kimi","Kimi K2 128K","free"),
- "huggingface":("🤗","HuggingFace","Qwen2.5 72B","free"),
+ "moonshot":("🌙","Moonshot","Kimi 128K","free"),
+ "huggingface":("🤗","HuggingFace","Mixtral 8x7B","free"),
  "replicate":("🔄","Replicate","Llama 3.1 405B","free"),
- "tavily":("🔍","Tavily","Search + AI","free"),
- "poll_free":("🌸","Pollinations","Free tier","free"),
- "or_gemini":("🔵","OR-Gemini","Gemini 2.0 Flash","free"),
- "or_llama":("🦙","OR-Llama","Llama 3.3 70B","free"),
- "or_qwen":("💻","OR-Qwen","Qwen Coder 32B","free"),
- "or_deepseek":("🌊","OR-DeepSeek","DeepSeek R1","free"),
- "or_mistral":("🅼","OR-Mistral","Mistral Small","free"),
- "p_gpt5":("🤖","GPT-5","OpenAI Premium","premium"),
- "p_claude":("🎭","Claude","Anthropic Premium","premium"),
- "p_gemini":("💎","Gemini 3","Google Premium","premium"),
+ "tavily":("🔍","Tavily","Search AI","free"),
+ "poll_free":("🌸","Pollinations","Free","free"),
+ "or_gemini":("🔵","OR-Gemini","Gemini 2.0","free"),
+ "or_llama":("🦙","OR-Llama","Llama 3.3","free"),
+ "or_qwen":("💻","OR-Qwen","Qwen 2.5 72B","free"),
+ "or_deepseek":("🌊","OR-DeepSeek","DeepSeek Chat","free"),
+ "or_mistral":("🅼","OR-Mistral","Mistral Nemo","free"),
+ "p_gpt5":("🤖","GPT-5","OpenAI","premium"),
+ "p_claude":("🎭","Claude","Anthropic","premium"),
+ "p_gemini":("💎","Gemini 3","Google","premium"),
  "p_deepseek":("🐳","DeepSeek V3","Premium","premium"),
- "p_grok":("❌","Grok 4","xAI Premium","premium"),
- "p_perplexity":("🔎","Perplexity","Search Premium","premium")
+ "p_grok":("❌","Grok 4","xAI","premium"),
+ "p_perplexity":("🔎","Perplexity","Search","premium")
 }
 IMG_INFO={"flux":("🎨","Flux","Fast HQ"),"sdxl":("⚡","SDXL","Turbo"),"gpt_img":("🤖","GPT","OpenAI"),"dream":("🌌","Seedream","Artistic")}
 def is_owner(uid):return uid in OWNER_IDS
@@ -200,75 +201,85 @@ def call_groq(msgs):
  g=get_groq()
  if not g:return None
  try:r=g.chat.completions.create(messages=msgs,model="llama-3.3-70b-versatile",temperature=0.7,max_tokens=2000);return r.choices[0].message.content
- except:return None
+ except Exception as e:logger.error(f"Groq:{e}");return None
 def call_cerebras(msgs):
  if not KEY_CEREBRAS:return None
- try:r=get_requests().post("https://api.cerebras.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_CEREBRAS}"},json={"model":"llama-3.3-70b","messages":msgs,"max_tokens":2000},timeout=30);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
- except:return None
+ try:r=get_requests().post("https://api.cerebras.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_CEREBRAS}","Content-Type":"application/json"},json={"model":"llama-3.3-70b","messages":msgs,"max_tokens":2000},timeout=30);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
+ except Exception as e:logger.error(f"Cerebras:{e}");return None
 def call_cohere(msgs):
  if not KEY_COHERE:return None
  try:
-  sys_p="";hist=[];user_msg="Hi"
+  sys_p="";user_msg="Hi"
   for m in msgs:
    if m["role"]=="system":sys_p=m["content"]
-  for m in msgs[:-1]:
-   if m["role"]in["user","assistant"]:hist.append({"role":"USER"if m["role"]=="user"else"CHATBOT","message":m["content"]})
   user_msg=msgs[-1]["content"]if msgs else"Hi"
-  d={"model":"command-r-plus","message":user_msg,"temperature":0.7}
+  d={"model":"command-r-plus-08-2024","message":user_msg}
   if sys_p:d["preamble"]=sys_p
-  if hist:d["chat_history"]=hist[-10:]
-  r=get_requests().post("https://api.cohere.com/v2/chat",headers={"Authorization":f"Bearer {KEY_COHERE}"},json=d,timeout=45)
-  return r.json().get("text")if r.status_code==200 else None
- except:return None
+  r=get_requests().post("https://api.cohere.com/v1/chat",headers={"Authorization":f"Bearer {KEY_COHERE}","Content-Type":"application/json","Accept":"application/json"},json=d,timeout=45)
+  if r.status_code==200:
+   data=r.json()
+   return data.get("text")or data.get("message")
+  logger.error(f"Cohere:{r.status_code}-{r.text[:100]}")
+  return None
+ except Exception as e:logger.error(f"Cohere:{e}");return None
 def call_cloudflare(msgs):
  if not CF_ACCOUNT_ID or not CF_API_TOKEN:return None
  try:
-  r=get_requests().post(f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",headers={"Authorization":f"Bearer {CF_API_TOKEN}"},json={"messages":msgs,"max_tokens":2000},timeout=45)
+  r=get_requests().post(f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",headers={"Authorization":f"Bearer {CF_API_TOKEN}","Content-Type":"application/json"},json={"messages":msgs,"max_tokens":2000},timeout=45)
   if r.status_code==200:d=r.json();return d["result"]["response"].strip()if d.get("success")else None
   return None
- except:return None
+ except Exception as e:logger.error(f"CF:{e}");return None
 def call_sambanova(msgs):
  if not KEY_SAMBANOVA:return None
- try:r=get_requests().post("https://api.sambanova.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_SAMBANOVA}"},json={"model":"Meta-Llama-3.3-70B-Instruct","messages":msgs,"max_tokens":2000},timeout=45);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
- except:return None
+ try:r=get_requests().post("https://api.sambanova.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_SAMBANOVA}","Content-Type":"application/json"},json={"model":"Meta-Llama-3.3-70B-Instruct","messages":msgs,"max_tokens":2000},timeout=45);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
+ except Exception as e:logger.error(f"SN:{e}");return None
 def call_together(msgs):
  if not KEY_TOGETHER:return None
- try:r=get_requests().post("https://api.together.xyz/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_TOGETHER}"},json={"model":"meta-llama/Llama-3.3-70B-Instruct-Turbo","messages":msgs,"max_tokens":2000},timeout=45);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
- except:return None
+ try:r=get_requests().post("https://api.together.xyz/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_TOGETHER}","Content-Type":"application/json"},json={"model":"meta-llama/Llama-3.3-70B-Instruct-Turbo","messages":msgs,"max_tokens":2000},timeout=45);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
+ except Exception as e:logger.error(f"Together:{e}");return None
 def call_mistral(msgs):
  if not KEY_MISTRAL:return None
- try:r=get_requests().post("https://api.mistral.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_MISTRAL}"},json={"model":"mistral-large-latest","messages":msgs,"max_tokens":2000},timeout=45);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
+ try:
+  r=get_requests().post("https://api.mistral.ai/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_MISTRAL}","Content-Type":"application/json","Accept":"application/json"},json={"model":"mistral-small-latest","messages":msgs,"max_tokens":2000},timeout=45)
+  if r.status_code==200:return r.json()["choices"][0]["message"]["content"]
+  logger.error(f"Mistral:{r.status_code}-{r.text[:100]}")
+  return None
  except Exception as e:logger.error(f"Mistral:{e}");return None
 def call_moonshot(msgs):
  if not KEY_MOONSHOT:return None
- try:r=get_requests().post("https://api.moonshot.cn/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_MOONSHOT}"},json={"model":"moonshot-v1-128k","messages":msgs,"max_tokens":2000},timeout=60);return r.json()["choices"][0]["message"]["content"]if r.status_code==200 else None
+ try:
+  r=get_requests().post("https://api.moonshot.cn/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_MOONSHOT}","Content-Type":"application/json"},json={"model":"moonshot-v1-8k","messages":msgs,"max_tokens":2000},timeout=60)
+  if r.status_code==200:return r.json()["choices"][0]["message"]["content"]
+  logger.error(f"Moonshot:{r.status_code}-{r.text[:100]}")
+  return None
  except Exception as e:logger.error(f"Moonshot:{e}");return None
 def call_huggingface(msgs):
  if not KEY_HUGGINGFACE:return None
  try:
-  prompt="\n".join([f"{m['role']}: {m['content']}"for m in msgs])
-  r=get_requests().post("https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct",headers={"Authorization":f"Bearer {KEY_HUGGINGFACE}"},json={"inputs":prompt,"parameters":{"max_new_tokens":1000,"return_full_text":False}},timeout=60)
+  prompt="\n".join([f"{m['role']}:{m['content']}"for m in msgs[-3:]])
+  r=get_requests().post("https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",headers={"Authorization":f"Bearer {KEY_HUGGINGFACE}","Content-Type":"application/json"},json={"inputs":prompt,"parameters":{"max_new_tokens":500,"return_full_text":False}},timeout=60)
   if r.status_code==200:
    d=r.json()
    if isinstance(d,list)and d:return d[0].get("generated_text","").strip()
-   return d.get("generated_text","").strip()if isinstance(d,dict)else None
+   return None
+  logger.error(f"HF:{r.status_code}-{r.text[:100]}")
   return None
  except Exception as e:logger.error(f"HF:{e}");return None
 def call_replicate(msgs):
  if not KEY_REPLICATE:return None
  try:
-  prompt="\n".join([f"{m['role']}: {m['content']}"for m in msgs])
-  r=get_requests().post("https://api.replicate.com/v1/models/meta/meta-llama-3.1-405b-instruct/predictions",headers={"Authorization":f"Bearer {KEY_REPLICATE}"},json={"input":{"prompt":prompt,"max_tokens":2000}},timeout=10)
+  prompt="\n".join([f"{m['role']}:{m['content']}"for m in msgs[-3:]])
+  r=get_requests().post("https://api.replicate.com/v1/models/meta/meta-llama-3.1-405b-instruct/predictions",headers={"Authorization":f"Bearer {KEY_REPLICATE}","Content-Type":"application/json"},json={"input":{"prompt":prompt,"max_tokens":1000}},timeout=15)
   if r.status_code in[200,201]:
    pred=r.json()
-   pred_url=pred.get("urls",{}).get("get")or f"https://api.replicate.com/v1/predictions/{pred.get('id')}"
-   for _ in range(30):
-    time.sleep(2)
+   pred_url=f"https://api.replicate.com/v1/predictions/{pred.get('id')}"
+   for _ in range(20):
+    time.sleep(3)
     pr=get_requests().get(pred_url,headers={"Authorization":f"Bearer {KEY_REPLICATE}"},timeout=10)
     if pr.status_code==200:
      pd=pr.json()
      if pd.get("status")=="succeeded":return"".join(pd.get("output",[]))
-     if pd.get("status")=="failed":return None
+     if pd.get("status")in["failed","canceled"]:return None
   return None
  except Exception as e:logger.error(f"Replicate:{e}");return None
 def call_tavily(msgs):
@@ -279,30 +290,31 @@ def call_tavily(msgs):
   if sr.status_code==200:
    sd=sr.json()
    results=sd.get("results",[])[:3]
-   context="\n".join([f"- {r.get('title','')}: {r.get('content','')[:200]}"for r in results])
+   context="\n".join([f"• {r.get('title','')}: {r.get('content','')[:150]}"for r in results])
    answer=sd.get("answer","")
-   if answer:return f"🔍 **Search Results:**\n{answer}\n\n**Sources:**\n{context}"
-   return f"🔍 **Search Results:**\n{context}"if context else None
+   if answer:return f"🔍 {answer}\n\n**Sources:**\n{context}"
+   return f"🔍 **Results:**\n{context}"if context else None
   return None
  except Exception as e:logger.error(f"Tavily:{e}");return None
 def call_openrouter(msgs,mk):
  if not KEY_OPENROUTER:return None
  try:
   mid=OR_MODELS.get(mk,OR_MODELS["or_llama"])
-  r=get_requests().post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_OPENROUTER}","HTTP-Referer":"https://github.com"},json={"model":mid,"messages":msgs,"max_tokens":2000},timeout=60)
+  r=get_requests().post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {KEY_OPENROUTER}","Content-Type":"application/json","HTTP-Referer":"https://github.com","X-Title":"DiscordBot"},json={"model":mid,"messages":msgs,"max_tokens":2000},timeout=60)
   if r.status_code==200:d=r.json();return d["choices"][0]["message"]["content"]if"choices"in d else None
+  logger.error(f"OR:{r.status_code}-{r.text[:100]}")
   return None
- except:return None
+ except Exception as e:logger.error(f"OR:{e}");return None
 def call_poll_free(prompt):
  try:r=get_requests().get(f"https://text.pollinations.ai/{quote(prompt)}",timeout=45);return r.text.strip()if r.status_code==200 and r.text.strip()else None
- except:return None
+ except Exception as e:logger.error(f"Poll:{e}");return None
 def call_poll_api(msgs,mk):
  if not KEY_POLLINATIONS:return None
  try:
   mid=POLL_TEXT.get(mk,mk)
-  r=get_requests().post("https://text.pollinations.ai/",headers={"Authorization":f"Bearer {KEY_POLLINATIONS}"},json={"messages":msgs,"model":mid},timeout=60)
+  r=get_requests().post("https://text.pollinations.ai/",headers={"Authorization":f"Bearer {KEY_POLLINATIONS}","Content-Type":"application/json"},json={"messages":msgs,"model":mid},timeout=60)
   return r.text.strip()if r.status_code==200 else None
- except:return None
+ except Exception as e:logger.error(f"PollAPI:{e}");return None
 def call_ai(model,msgs,prompt=""):
  if model=="groq":return call_groq(msgs),"Groq"
  elif model=="cerebras":return call_cerebras(msgs),"Cerebras"
@@ -330,7 +342,7 @@ def ask_ai(prompt,uid=None,model=None):
  msgs.append({"role":"user","content":prompt})
  result,used=call_ai(sel,msgs,prompt)
  if not result:
-  fallback=[(call_groq,msgs,"Groq",KEY_GROQ),(call_cohere,msgs,"Cohere",KEY_COHERE),(call_cerebras,msgs,"Cerebras",KEY_CEREBRAS),(call_mistral,msgs,"Mistral",KEY_MISTRAL),(call_moonshot,msgs,"Moonshot",KEY_MOONSHOT),(call_cloudflare,msgs,"CF",CF_API_TOKEN),(call_sambanova,msgs,"SN",KEY_SAMBANOVA),(lambda m:call_openrouter(m,"or_gemini"),msgs,"OR",KEY_OPENROUTER),(lambda p:call_poll_free(prompt),None,"Poll",True)]
+  fallback=[(call_groq,msgs,"Groq",KEY_GROQ),(call_cerebras,msgs,"Cerebras",KEY_CEREBRAS),(call_cloudflare,msgs,"CF",CF_API_TOKEN),(call_sambanova,msgs,"SN",KEY_SAMBANOVA),(lambda m:call_openrouter(m,"or_gemini"),msgs,"OR",KEY_OPENROUTER),(lambda p:call_poll_free(prompt),None,"Poll",True)]
   for fn,arg,name,key in fallback:
    if not key:continue
    try:
@@ -348,12 +360,13 @@ async def gen_image(prompt,model="flux"):
   r=get_requests().get(url,headers={"Authorization":f"Bearer {KEY_POLLINATIONS}"},timeout=90)
   return(r.content,None)if r.status_code==200 else(None,f"HTTP {r.status_code}")
  except Exception as e:return None,str(e)
-class ModelSelect(ui.Select):
- def __init__(s,uid):
-  s.uid=uid;avail=get_available_models(uid)
-  opts=[discord.SelectOption(label=MODEL_INFO[m][1],value=m,emoji=MODEL_INFO[m][0],description=f"{MODEL_INFO[m][2][:35]}[{MODEL_INFO[m][3]}]")for m in avail[:25]if m in MODEL_INFO]
+# Fixed: Split models into pages for Owner (max 25 per Select)
+class ModelSelectPage(ui.Select):
+ def __init__(s,uid,models,page=1):
+  s.uid=uid
+  opts=[discord.SelectOption(label=MODEL_INFO[m][1],value=m,emoji=MODEL_INFO[m][0],description=f"{MODEL_INFO[m][2][:30]}[{MODEL_INFO[m][3]}]")for m in models if m in MODEL_INFO]
   if not opts:opts=[discord.SelectOption(label="Groq",value="groq",emoji="⚡")]
-  super().__init__(placeholder="🤖 Pilih Model...",options=opts)
+  super().__init__(placeholder=f"🤖 Model (Page {page})...",options=opts[:25])
  async def callback(s,i:discord.Interaction):
   if i.user.id!=s.uid:return await i.response.send_message("❌ Bukan menu kamu!",ephemeral=True)
   v=s.values[0]
@@ -361,17 +374,14 @@ class ModelSelect(ui.Select):
   db.set_model(i.user.id,v);info=MODEL_INFO.get(v,("","?","",""))
   await i.response.send_message(f"✅ Model: {info[0]} **{info[1]}**",ephemeral=True)
 class ModelView(ui.View):
- def __init__(s,uid):super().__init__(timeout=120);s.add_item(ModelSelect(uid))
-class AdminModelSelect(ui.Select):
- def __init__(s):
-  opts=[discord.SelectOption(label=v[1],value=k,emoji=v[0],description=f"{v[2][:30]}[{v[3]}]")for k,v in list(MODEL_INFO.items())[:25]]
-  super().__init__(placeholder="👑 Admin Model...",options=opts)
- async def callback(s,i:discord.Interaction):
-  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only",ephemeral=True)
-  v=s.values[0];db.set_model(i.user.id,v);info=MODEL_INFO.get(v,("","?","",""))
-  await i.response.send_message(f"✅ {info[0]} **{info[1]}** [{info[3]}]",ephemeral=True)
-class AdminModelView(ui.View):
- def __init__(s):super().__init__(timeout=120);s.add_item(AdminModelSelect())
+ def __init__(s,uid):
+  super().__init__(timeout=120)
+  avail=get_available_models(uid)
+  if len(avail)<=25:
+   s.add_item(ModelSelectPage(uid,avail,1))
+  else:
+   s.add_item(ModelSelectPage(uid,avail[:25],1))
+   if len(avail)>25:s.add_item(ModelSelectPage(uid,avail[25:50],2))
 class ImgSelect(ui.Select):
  def __init__(s,uid):
   s.uid=uid
@@ -399,8 +409,8 @@ class ShieldSelect(ui.Select):
    if r.get("success"):await i.followup.send(file=discord.File(io.BytesIO(r["script"].encode()),"script.lua"),ephemeral=True)
    else:await i.followup.send(f"❌ {r.get('error')}",ephemeral=True)
   elif v=="ka":r=shield.keepalive();await i.followup.send(f"✅ {r.get('status')}"if r.get("status")=="alive"else f"❌ {r}",ephemeral=True)
-  elif v=="cs":r=shield.clear_sessions();await i.followup.send(f"{'✅ Done'if r.get('success')else'❌'}",ephemeral=True)
-  elif v=="cl":r=shield.clear_logs();await i.followup.send(f"{'✅ Done'if r.get('success')else'❌'}",ephemeral=True)
+  elif v=="cs":r=shield.clear_sessions();await i.followup.send(f"{'✅'if r.get('success')else'❌'}",ephemeral=True)
+  elif v=="cl":r=shield.clear_logs();await i.followup.send(f"{'✅'if r.get('success')else'❌'}",ephemeral=True)
 class ShieldView(ui.View):
  def __init__(s):super().__init__(timeout=180);s.add_item(ShieldSelect())
 class ShieldMgmtSelect(ui.Select):
@@ -458,6 +468,7 @@ async def on_ready():logger.info(f'🔥 {bot.user} | {len(bot.guilds)}');await b
 @bot.event
 async def on_command_error(ctx,e):
  if isinstance(e,commands.CommandNotFound):return
+ logger.error(f"CmdErr:{e}")
 @bot.event
 async def on_message(msg):
  if msg.author.bot:return
@@ -484,19 +495,14 @@ async def cmd_ai(ctx,*,p:str=None):
 async def cmd_model(ctx):
  cur=db.get_model(ctx.author.id);info=MODEL_INFO.get(cur,("","?","",""));avail=get_available_models(ctx.author.id)
  e=discord.Embed(title="🤖 Model Selection",description=f"Current: {info[0]} **{info[1]}**\nAvailable: `{len(avail)}` models",color=0x5865F2)
+ if len(avail)>25:e.set_footer(text="Models split into multiple dropdowns")
  await ctx.send(embed=e,view=ModelView(ctx.author.id))
-@bot.command(name="adminmodel",aliases=["am"])
-async def cmd_am(ctx):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only")
- cur=db.get_model(ctx.author.id);info=MODEL_INFO.get(cur,("","?","",""))
- e=discord.Embed(title="👑 Admin Model",description=f"Current: {info[0]} **{info[1]}** [{info[3]}]",color=0xFFD700)
- await ctx.send(embed=e,view=AdminModelView())
 @bot.command(name="setpublic",aliases=["sp"])
 async def cmd_sp(ctx,*,models:str=None):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only")
  if not models:
   cur=db.get_setting("public_model_access")or"groq"
-  return await ctx.send(f"📋 Current: `{cur}`\n\n`{PREFIX}sp groq` - Groq only\n`{PREFIX}sp groq,cohere` - Multiple\n`{PREFIX}sp all` - All free\n`{PREFIX}sp none` - Owner only\n\nFree: `{','.join(FREE_MODELS[:10])}...`")
+  return await ctx.send(f"📋 Current: `{cur}`\n\n`{PREFIX}sp groq` - Groq only\n`{PREFIX}sp groq,cohere` - Multiple\n`{PREFIX}sp all` - All free\n`{PREFIX}sp none` - Owner only\n\nFree: `{','.join(FREE_MODELS[:8])}...`")
  m=models.lower().strip()
  if m=="none":db.set_setting("public_model_access","");await ctx.send("✅ Public: **None**")
  elif m=="all":db.set_setting("public_model_access",",".join(FREE_MODELS));await ctx.send(f"✅ Public: **All free** ({len(FREE_MODELS)})")
@@ -568,7 +574,7 @@ async def cmd_help(ctx):
  e.add_field(name="🤖 AI",value=f"`{PREFIX}ai <text>`\n`@bot <text>`\n`{PREFIX}model`",inline=True)
  e.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}imgmodel`",inline=True)
  e.add_field(name="🔧 Tools",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping`",inline=True)
- if is_owner(ctx.author.id):e.add_field(name="👑 Owner",value=f"`{PREFIX}am` `{PREFIX}sp` `{PREFIX}au`\n`{PREFIX}sh` `{PREFIX}sm` `{PREFIX}testai`",inline=False)
+ if is_owner(ctx.author.id):e.add_field(name="👑 Owner",value=f"`{PREFIX}sp` `{PREFIX}au`\n`{PREFIX}sh` `{PREFIX}sm` `{PREFIX}testai`",inline=False)
  await ctx.send(embed=e)
 @bot.command(name="testai")
 async def cmd_testai(ctx):
@@ -576,11 +582,11 @@ async def cmd_testai(ctx):
  msg=await ctx.send("🔄 Testing...")
  test=[{"role":"user","content":"Say OK"}]
  results=[]
- providers=[("Groq",call_groq,test,KEY_GROQ),("Cohere",call_cohere,test,KEY_COHERE),("Cerebras",call_cerebras,test,KEY_CEREBRAS),("Mistral",call_mistral,test,KEY_MISTRAL),("Moonshot",call_moonshot,test,KEY_MOONSHOT),("HuggingFace",call_huggingface,test,KEY_HUGGINGFACE),("CF",call_cloudflare,test,CF_API_TOKEN),("SN",call_sambanova,test,KEY_SAMBANOVA),("Together",call_together,test,KEY_TOGETHER),("OR",lambda m:call_openrouter(m,"or_gemini"),test,KEY_OPENROUTER),("Tavily",call_tavily,test,KEY_TAVILY),("Poll",lambda p:call_poll_free("OK"),None,True)]
- for name,fn,arg,key in providers:
+ providers=[("Groq",lambda:call_groq(test),KEY_GROQ),("Cohere",lambda:call_cohere(test),KEY_COHERE),("Cerebras",lambda:call_cerebras(test),KEY_CEREBRAS),("Mistral",lambda:call_mistral(test),KEY_MISTRAL),("Moonshot",lambda:call_moonshot(test),KEY_MOONSHOT),("HF",lambda:call_huggingface(test),KEY_HUGGINGFACE),("CF",lambda:call_cloudflare(test),CF_API_TOKEN),("SN",lambda:call_sambanova(test),KEY_SAMBANOVA),("Together",lambda:call_together(test),KEY_TOGETHER),("OR",lambda:call_openrouter(test,"or_gemini"),KEY_OPENROUTER),("Tavily",lambda:call_tavily(test),KEY_TAVILY),("Poll",lambda:call_poll_free("OK"),True)]
+ for name,fn,key in providers:
   if not key:results.append(f"⚪ {name}");continue
-  try:r=fn(arg)if arg else fn("OK");results.append(f"✅ {name}"if r else f"❌ {name}")
-  except:results.append(f"❌ {name}")
+  try:r=fn();results.append(f"✅ {name}"if r else f"❌ {name}")
+  except Exception as ex:results.append(f"❌ {name}");logger.error(f"Test {name}:{ex}")
  await msg.edit(content=f"**AI Status:**\n{' | '.join(results)}")
 @bot.command(name="blacklist",aliases=["bl"])
 async def cmd_bl(ctx,act:str=None,user:discord.User=None):
