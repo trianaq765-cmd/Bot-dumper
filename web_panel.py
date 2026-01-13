@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Optional
 ADMIN_USER=os.getenv("ADMIN_USER","admin")
 ADMIN_PASS=os.getenv("ADMIN_PASS","admin123")
+print(f"🔐 Admin User: {ADMIN_USER}")
+print(f"🔐 Admin Pass: {'*'*len(ADMIN_PASS)}")  # Sensor password
 BOT_SECRET=os.getenv("CONFIG_BOT_SECRET","bot_secret_key_123")
 DB_PATH="/tmp/bot_config.db"
 db_lock=threading.Lock()
@@ -42,8 +44,10 @@ def config():
   settings={r['key']:r['value']for r in conn.execute('SELECT * FROM settings')}
   user_models={r['uid']:r['model_id']for r in conn.execute('SELECT * FROM user_models')}
   conn.close();return{"keys":keys,"models":models,"settings":settings,"user_models":user_models}
-def auth_admin(c:HTTPBasicCredentials=Depends(security)):
- if not(secrets.compare_digest(c.username,ADMIN_USER)and secrets.compare_digest(c.password,ADMIN_PASS)):raise HTTPException(401,"Unauthorized",{"WWW-Authenticate":"Basic"})
+def def auth_admin(c:HTTPBasicCredentials=Depends(security)):
+ user_ok=secrets.compare_digest(c.username.encode('utf-8'),ADMIN_USER.encode('utf-8'))
+ pass_ok=secrets.compare_digest(c.password.encode('utf-8'),ADMIN_PASS.encode('utf-8'))
+ if not(user_ok and pass_ok):raise HTTPException(401,"Unauthorized",{"WWW-Authenticate":"Basic"})
  return c.username
 def auth_bot(req:Request):
  if not secrets.compare_digest(req.headers.get("X-Bot-Secret",""),BOT_SECRET):raise HTTPException(401,"Invalid Secret")
