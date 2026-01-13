@@ -7,8 +7,7 @@ from urllib.parse import quote
 try:
  from web_panel import start_web_panel,get_key as wp_get_key,config as wp_config
  HAS_WEB_PANEL=True
-except:
- start_web_panel=None;wp_get_key=None;wp_config=None;HAS_WEB_PANEL=False
+except:start_web_panel=None;wp_get_key=None;wp_config=None;HAS_WEB_PANEL=False
 try:from keep_alive import keep_alive
 except:keep_alive=lambda:None
 logging.basicConfig(level=logging.INFO,format='%(asctime)s|%(levelname)s|%(message)s')
@@ -115,46 +114,40 @@ def is_owner(uid):return uid in OWNER_IDS
 class ShieldAPI:
  def __init__(self,url,key):self.url=url;self.key=key;self.timeout=30
  def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json","Accept":"application/json"}
- def _get(self,ep):
-  if not self.url or not self.key:return{"success":False,"error":"Not configured"}
-  try:r=get_requests().get(f"{self.url}{ep}",headers=self._h(),timeout=self.timeout);return r.json()if r.status_code==200 else{"success":False,"error":f"HTTP {r.status_code}"}
-  except Exception as e:return{"success":False,"error":str(e)[:80]}
- def _post(self,ep,data=None):
-  if not self.url or not self.key:return{"success":False,"error":"Not configured"}
-  try:r=get_requests().post(f"{self.url}{ep}",headers=self._h(),json=data or{},timeout=self.timeout);return r.json()if r.status_code in[200,201]else{"success":False,"error":f"HTTP {r.status_code}"}
-  except Exception as e:return{"success":False,"error":str(e)[:80]}
- def _del(self,ep):
-  if not self.url or not self.key:return{"success":False,"error":"Not configured"}
-  try:r=get_requests().delete(f"{self.url}{ep}",headers=self._h(),timeout=self.timeout);return r.json()if r.status_code==200 else{"success":False,"error":f"HTTP {r.status_code}"}
-  except Exception as e:return{"success":False,"error":str(e)[:80]}
- def stats(self):return self._get("/api/admin/stats")
- def sessions(self):return self._get("/api/admin/sessions")
- def logs(self):return self._get("/api/admin/logs")
- def bans(self):return self._get("/api/admin/bans")
- def whitelist(self):return self._get("/api/admin/whitelist")
- def suspended(self):return self._get("/api/admin/suspended")
- def script(self):return self._get("/api/admin/script")
+ def _req(self,method,ep,data=None):
+  if not self.url or not self.key:return{"success":False,"error":"Shield not configured"}
+  try:
+   url=f"{self.url}{ep}"
+   if method=="GET":r=get_requests().get(url,headers=self._h(),timeout=self.timeout)
+   elif method=="POST":r=get_requests().post(url,headers=self._h(),json=data or{},timeout=self.timeout)
+   elif method=="DELETE":r=get_requests().delete(url,headers=self._h(),json=data,timeout=self.timeout)
+   else:return{"success":False,"error":"Invalid method"}
+   if r.status_code in[200,201,204]:
+    try:return r.json()
+    except:return{"success":True}
+   return{"success":False,"error":f"HTTP {r.status_code}"}
+  except Exception as e:return{"success":False,"error":str(e)[:100]}
  def health(self):
+  if not self.url:return{"success":False}
   try:r=get_requests().get(f"{self.url}/api/keepalive",timeout=10);return{"success":r.status_code==200}
   except:return{"success":False}
- def add_ban(self,hwid=None,ip=None,pid=None,reason="Via Discord"):
-  d={"reason":reason}
-  if hwid:d["hwid"]=hwid
-  if ip:d["ip"]=ip
-  if pid:d["playerId"]=pid
-  return self._post("/api/admin/bans",d)
- def rem_ban(self,bid):return self._del(f"/api/admin/bans/{bid}")
- def add_wl(self,t,v):return self._post("/api/admin/whitelist",{"type":t,"value":v})
- def rem_wl(self,t,v):return self._post("/api/admin/whitelist/remove",{"type":t,"value":v})
- def suspend(self,t,v,reason="Via Discord",dur=None):
-  d={"type":t,"value":v,"reason":reason}
-  if dur:d["duration"]=dur
-  return self._post("/api/admin/suspend",d)
- def unsuspend(self,t,v):return self._post("/api/admin/unsuspend",{"type":t,"value":v})
- def kill(self,sid,reason="Via Discord"):return self._post("/api/admin/kill-session",{"sessionId":sid,"reason":reason})
- def clear_sessions(self):return self._post("/api/admin/sessions/clear",{})
- def clear_logs(self):return self._post("/api/admin/logs/clear",{})
- def clear_cache(self):return self._post("/api/admin/cache/clear",{})
+ def stats(self):return self._req("GET","/api/admin/stats")
+ def sessions(self):return self._req("GET","/api/admin/sessions")
+ def logs(self):return self._req("GET","/api/admin/logs")
+ def bans(self):return self._req("GET","/api/admin/bans")
+ def whitelist(self):return self._req("GET","/api/admin/whitelist")
+ def suspended(self):return self._req("GET","/api/admin/suspended")
+ def script(self):return self._req("GET","/api/admin/script")
+ def add_ban(self,t,v,reason="Via Discord"):return self._req("POST","/api/admin/bans",{t:v,"reason":reason})
+ def rem_ban(self,bid):return self._req("DELETE",f"/api/admin/bans/{bid}")
+ def add_wl(self,t,v):return self._req("POST","/api/admin/whitelist",{"type":t,"value":v})
+ def rem_wl(self,t,v):return self._req("POST","/api/admin/whitelist/remove",{"type":t,"value":v})
+ def suspend(self,t,v,reason="Via Discord"):return self._req("POST","/api/admin/suspend",{"type":t,"value":v,"reason":reason})
+ def unsuspend(self,t,v):return self._req("POST","/api/admin/unsuspend",{"type":t,"value":v})
+ def kill(self,sid,reason="Via Discord"):return self._req("POST","/api/admin/kill-session",{"sessionId":sid,"reason":reason})
+ def clear_sessions(self):return self._req("POST","/api/admin/sessions/clear")
+ def clear_logs(self):return self._req("POST","/api/admin/logs/clear")
+ def clear_cache(self):return self._req("POST","/api/admin/cache/clear")
 shield=ShieldAPI(SHIELD_URL,SHIELD_ADMIN_KEY)
 class Database:
  def __init__(self,path="bot.db"):
@@ -459,66 +452,54 @@ class ShieldInfoSelect(ui.Select):
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   await i.response.defer(ephemeral=True);a=self.values[0];embed=discord.Embed(color=0x3498DB)
-  if a=="stats":
-   d=shield.stats();embed.title="📊 Shield Statistics"
-   if isinstance(d,dict)and d.get("success")is not False:
-    for k,v in d.items():
-     if k not in["success","error"]:embed.add_field(name=str(k).replace("_"," ").title(),value=f"`{v}`",inline=True)
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="sessions":
-   d=shield.sessions();embed.title="🔄 Active Sessions"
-   if isinstance(d,dict)and"sessions"in d:
-    ss=d["sessions"]
-    if ss:
-     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"ID:`{str(s.get('id','?'))[:15]}`",inline=True)
-    else:embed.description="✅ No active sessions"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="logs":
-   d=shield.logs();embed.title="📋 Access Logs"
-   if isinstance(d,dict)and"logs"in d:
-    ll=d["logs"]
-    if ll:embed.description="\n".join([f"• `{l.get('time','?')[:16]}` {l.get('service','?')}"for l in ll[:10]])
-    else:embed.description="✅ No logs"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="bans":
-   d=shield.bans();embed.title="🚫 Ban List"
-   if isinstance(d,dict)and"bans"in d:
-    bb=d["bans"]
-    if bb:
-     for idx,b in enumerate(bb[:10]):embed.add_field(name=f"#{b.get('id',idx+1)}",value=f"Type:`{b.get('type','?')}`\nVal:`{str(b.get('value','?'))[:15]}`",inline=True)
-    else:embed.description="✅ No bans"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="wl":
-   d=shield.whitelist();embed.title="✅ Whitelist"
-   if isinstance(d,dict)and"whitelist"in d:
-    ww=d["whitelist"]
-    if ww:
-     for idx,w in enumerate(ww[:10]):embed.add_field(name=f"#{idx+1}",value=f"Type:`{w.get('type','?')}`\nVal:`{str(w.get('value','?'))[:15]}`",inline=True)
-    else:embed.description="ℹ️ Empty"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="sus":
-   d=shield.suspended();embed.title="⏸️ Suspended"
-   if isinstance(d,dict)and"suspended"in d:
-    ss=d["suspended"]
-    if ss:
-     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"Type:`{s.get('type','?')}`",inline=True)
-    else:embed.description="✅ None"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="health":
-   d=shield.health();embed.title="💚 Shield Status"
-   embed.description="✅ **ONLINE**"if d.get("success")else"❌ **OFFLINE**"
-   embed.color=0x2ECC71 if d.get("success")else 0xE74C3C
-  elif a=="botstats":
-   s=db.get_stats();embed.title="📈 Bot Statistics"
-   embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
-   embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
-   embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
-  elif a=="script":
-   d=shield.script()
-   if d.get("success")and d.get("script"):
-    f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua")
-    return await i.followup.send("📜 **Script:**",file=f,ephemeral=True)
-   else:embed.description=f"❌ {d.get('error','Not available')}"
+  try:
+   if a=="stats":
+    d=shield.stats();embed.title="📊 Statistics"
+    if d.get("success")is False:embed.description=f"❌ {d.get('error','Failed')}"
+    elif isinstance(d,dict):
+     for k,v in list(d.items())[:15]:
+      if k not in["success","error"]:embed.add_field(name=str(k).title(),value=f"`{str(v)[:50]}`",inline=True)
+   elif a=="sessions":
+    d=shield.sessions();embed.title="🔄 Sessions"
+    if d.get("success")is False:embed.description=f"❌ {d.get('error','Failed')}"
+    else:
+     ss=d.get("sessions",d if isinstance(d,list)else[])
+     if ss:
+      for idx,s in enumerate(ss[:8]):embed.add_field(name=f"#{idx+1}",value=f"ID:`{str(s.get('id','?'))[:10]}`\nUser:`{str(s.get('userId','?'))[:10]}`",inline=True)
+     else:embed.description="None"
+   elif a=="logs":
+    d=shield.logs();embed.title="📋 Logs"
+    if d.get("success")is False:embed.description=f"❌ {d.get('error','Failed')}"
+    else:
+     ll=d.get("logs",d if isinstance(d,list)else[])
+     if ll:
+      txt=[]
+      for l in ll[:8]:txt.append(f"`{l.get('time','?')[:16]}` {l.get('service','?')}")
+      embed.description="\n".join(txt)
+     else:embed.description="None"
+   elif a=="bans":
+    d=shield.bans();embed.title="🚫 Bans"
+    if d.get("success")is False:embed.description=f"❌ {d.get('error','Failed')}"
+    else:
+     bb=d.get("bans",d if isinstance(d,list)else[])
+     if bb:
+      for idx,b in enumerate(bb[:8]):embed.add_field(name=f"#{b.get('id','?')}",value=f"`{str(b.get('value','?'))[:15]}`",inline=True)
+     else:embed.description="None"
+   elif a=="health":
+    d=shield.health();embed.title="💚 Health"
+    embed.description="✅ Online"if d.get("success")else"❌ Offline"
+   elif a=="botstats":
+    s=db.get_stats();embed.title="📈 Bot Stats"
+    embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
+    embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
+   elif a=="script":
+    d=shield.script()
+    if d.get("script"):
+     f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua")
+     return await i.followup.send("📜 **Script:**",file=f,ephemeral=True)
+    else:embed.description="❌ Not available"
+  except Exception as e:embed.description=f"Error: {str(e)[:100]}"
+  embed.set_footer(text=WATERMARK)
   await i.followup.send(embed=embed,ephemeral=True)
 class ShieldActionSelect(ui.Select):
  def __init__(self):
@@ -531,33 +512,33 @@ class ShieldActionSelect(ui.Select):
   elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
   elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
   else:r={"success":False};msg="Unknown"
-  await i.followup.send(f"✅ {msg}!"if r.get("success")is not False else f"❌ Failed",ephemeral=True)
+  await i.followup.send(f"✅ {msg}"if r.get("success")is not False else"❌ Failed",ephemeral=True)
 class ShieldView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
  def __init__(self):
-  opts=[discord.SelectOption(label="Ban Player",value="ban_p",emoji="👤"),discord.SelectOption(label="Ban HWID",value="ban_h",emoji="💻"),discord.SelectOption(label="Ban IP",value="ban_i",emoji="🌐"),discord.SelectOption(label="Unban",value="unban",emoji="🔓"),discord.SelectOption(label="Add Whitelist",value="add_wl",emoji="➕"),discord.SelectOption(label="Remove Whitelist",value="rem_wl",emoji="➖"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀")]
+  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫"),discord.SelectOption(label="Unban",value="unban",emoji="🔓"),discord.SelectOption(label="Whitelist",value="wl",emoji="✅"),discord.SelectOption(label="Remove WL",value="rem_wl",emoji="➖"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️"),discord.SelectOption(label="Kill",value="kill",emoji="💀")]
   super().__init__(placeholder="Management...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
-  a=self.values[0];titles={"ban_p":"Ban Player","ban_h":"Ban HWID","ban_i":"Ban IP","unban":"Unban","add_wl":"Add Whitelist","rem_wl":"Remove Whitelist","sus":"Suspend","unsus":"Unsuspend","kill":"Kill Session"}
-  class ActionModal(ui.Modal,title=titles.get(a,"Action")):
-   val=ui.TextInput(label="Value",placeholder="ID/HWID/IP...",required=True)
-   reason=ui.TextInput(label="Reason",placeholder="Optional",required=False,default="Via Discord")
-   def __init__(s,act):super().__init__();s.act=act
-   async def on_submit(s,mi:discord.Interaction):
-    v=s.val.value.strip();r=s.reason.value.strip()or"Via Discord";res={"success":False}
-    if s.act=="ban_p":res=shield.add_ban(pid=v,reason=r)
-    elif s.act=="ban_h":res=shield.add_ban(hwid=v,reason=r)
-    elif s.act=="ban_i":res=shield.add_ban(ip=v,reason=r)
-    elif s.act=="unban":res=shield.rem_ban(v)
-    elif s.act=="add_wl":p=v.split(":",1);res=shield.add_wl(p[0]if len(p)>1 else"userId",p[-1])
-    elif s.act=="rem_wl":p=v.split(":",1);res=shield.rem_wl(p[0]if len(p)>1 else"userId",p[-1])
-    elif s.act=="sus":p=v.split(":",1);res=shield.suspend(p[0]if len(p)>1 else"userId",p[-1],r)
-    elif s.act=="unsus":p=v.split(":",1);res=shield.unsuspend(p[0]if len(p)>1 else"userId",p[-1])
-    elif s.act=="kill":res=shield.kill(v,r)
-    await mi.response.send_message(f"✅ Done: `{v}`"if res.get("success")is not False else f"❌ {res.get('error','Failed')}",ephemeral=True)
-  await i.response.send_modal(ActionModal(a))
+  a=self.values[0]
+  class SM(ui.Modal,title="Manage"):
+   val=ui.TextInput(label="Value (userId/hwid/ip)",required=True)
+   reason=ui.TextInput(label="Reason",required=False,default="Via Discord")
+   def __init__(s,ac):super().__init__();s.ac=ac
+   async def on_submit(s,mi):
+    v=s.val.value;r=s.reason.value;res={"success":False}
+    try:
+     if s.ac=="ban":res=shield.add_ban("userId",v,r)
+     elif s.ac=="unban":res=shield.rem_ban(v)
+     elif s.ac=="wl":res=shield.add_wl("userId",v)
+     elif s.ac=="rem_wl":res=shield.rem_wl("userId",v)
+     elif s.ac=="sus":res=shield.suspend("userId",v,r)
+     elif s.ac=="unsus":res=shield.unsuspend("userId",v)
+     elif s.ac=="kill":res=shield.kill(v,r)
+     await mi.response.send_message(f"✅ Done"if res.get("success")is not False else"❌ Failed",ephemeral=True)
+    except:await mi.response.send_message("❌ Error",ephemeral=True)
+  await i.response.send_modal(SM(a))
 class ShieldManageView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(ShieldManageSelect())
 class ImgSelect(ui.Select):
@@ -624,7 +605,6 @@ async def cmd_cm(ctx):
  embed=discord.Embed(title="🤖 Your Current Model",color=0x5865F2)
  embed.add_field(name="Model",value=f"{info['e']} **{info['n']}**",inline=True)
  embed.add_field(name="Provider",value=f"`{info['p']}`",inline=True)
- embed.add_field(name="Category",value=f"`{info['c']}`",inline=True)
  embed.add_field(name="API Model",value=f"`{info['m']}`",inline=False)
  embed.set_footer(text=f"Change via Web Panel • {WATERMARK}")
  await ctx.send(embed=embed)
@@ -639,12 +619,11 @@ async def cmd_lm(ctx):
   if c not in cats:cats[c]=[]
   cats[c].append(f"{m['e']} `{mid}`")
  embed=discord.Embed(title="📋 Available Models",color=0x5865F2)
- names={"main":"⚡ Main","openrouter":"🌐 OpenRouter","pollinations_free":"🆓 Poll Free","pollinations_api":"🔑 Poll API","custom":"⚙️ Custom"}
  for cat,items in cats.items():
   if items:
    val="\n".join(items[:6])
    if len(items)>6:val+=f"\n+{len(items)-6} more"
-   embed.add_field(name=f"{names.get(cat,cat)} ({len(items)})",value=val,inline=True)
+   embed.add_field(name=f"{cat.upper()} ({len(items)})",value=val,inline=True)
  embed.set_footer(text=f"Set via Web Panel • {WATERMARK}")
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
@@ -730,7 +709,6 @@ async def cmd_shield(ctx):
  st=shield.health()
  embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
  embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
- embed.add_field(name="URL",value=f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldView())
 @bot.command(name="shieldm",aliases=["sm"])
@@ -744,7 +722,6 @@ async def cmd_sm(ctx):
  except:pass
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
  embed.add_field(name="Format",value="`type:value`\nEx:`hwid:ABC123`",inline=True)
- embed.add_field(name="Types",value="`userId`,`hwid`,`ip`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
@@ -762,7 +739,6 @@ async def cmd_sync(ctx):
   embed=discord.Embed(title="✅ Config Synced",color=0x2ECC71)
   embed.add_field(name="🔑 Keys",value=f"`{len(config.get('keys',{}))}`",inline=True)
   embed.add_field(name="🤖 Models",value=f"`{len(config.get('models',{}))}`",inline=True)
-  embed.add_field(name="👥 Users",value=f"`{len(config.get('user_models',{}))}`",inline=True)
   embed.set_footer(text=WATERMARK)
   await st.edit(content=None,embed=embed)
  else:await st.edit(content="❌ Failed to sync")
@@ -778,7 +754,6 @@ async def cmd_ping(ctx):
  embed=discord.Embed(title="🏓 Pong!",color=0x2ECC71)
  embed.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`",inline=True)
  embed.add_field(name="Model",value=f"{info['e']} {info['n']}",inline=True)
- embed.add_field(name="Role",value=f"`{'Owner'if is_owner(ctx.author.id)else'User'}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
@@ -796,11 +771,6 @@ async def cmd_status(ctx):
  embed=discord.Embed(title="📊 Status",color=0x5865F2)
  embed.add_field(name="🌐 Panel",value=f"{'✅ Connected'if panel_ok else'❌ Offline'}",inline=True)
  embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield.health().get('success')else'❌ Offline'}",inline=True)
- embed.add_field(name="📈 Commands",value=f"`{db.get_stats()['total']}`",inline=True)
- keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
- kst="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
- embed.add_field(name="🔑 Keys",value=kst,inline=True)
- embed.add_field(name="⚙️ Config",value=f"Default:`{get_default_model()}`\nModels:`{len(get_models())}`\nServers:`{len(bot.guilds)}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
 @bot.command(name="testai")
@@ -814,7 +784,7 @@ async def cmd_testai(ctx):
  except:pass
  st=await ctx.send("🔄 Testing providers...")
  test=[{"role":"user","content":"Say OK"}];results=[]
- providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("CF",lambda:call_cloudflare(test),get_api_key("cloudflare_token")),("Cohere",lambda:call_cohere(test),get_api_key("cohere")),("Mistral",lambda:call_mistral(test),get_api_key("mistral")),("Together",lambda:call_together(test),get_api_key("together")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
+ providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
  for n,f,k in providers:
   if not k:results.append(f"⚪{n}");continue
   try:r=f();results.append(f"✅{n}"if r else f"❌{n}")
@@ -830,32 +800,12 @@ async def cmd_bl(ctx,action:str=None,user:discord.User=None):
  if not action or not user:return await ctx.send(f"Usage:`{PREFIX}bl add/rem @user`",delete_after=10)
  if action in["add","ban"]:db.ban(user.id);await ctx.send(f"✅ Banned {user}\n-# *{WATERMARK}*",delete_after=5)
  elif action in["rem","remove","unban"]:db.unban(user.id);await ctx.send(f"✅ Unbanned {user}\n-# *{WATERMARK}*",delete_after=5)
-@bot.command(name="allowuser",aliases=["au"])
-async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
- if not is_owner(ctx.author.id):
-  await ctx.send("❌ Owner only!",delete_after=5)
-  try:await ctx.message.delete()
-  except:pass
-  return
- try:await ctx.message.delete()
- except:pass
- if not user:return await ctx.send(f"Usage:`{PREFIX}au @user model1,model2`",delete_after=10)
- if not models:
-  curr=db.get_allowed(user.id)
-  return await ctx.send(f"📋 {user.mention}:`{','.join(curr)or'None'}`\n-# *{WATERMARK}*",delete_after=10)
- if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user.mention}\n-# *{WATERMARK}*",delete_after=5)
- all_m=list(get_models().keys())
- valid=[m.strip()for m in models.split(",")if m.strip()in all_m]
- if not valid:return await ctx.send("❌ Invalid models",delete_after=5)
- db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}:`{','.join(valid)}`\n-# *{WATERMARK}*",delete_after=5)
 @bot.command(name="stats")
 async def cmd_stats(ctx):
  s=db.get_stats()
  embed=discord.Embed(title="📈 Bot Statistics",color=0x5865F2)
  embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
  embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
- embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
- if s['top']:embed.add_field(name="Top Commands",value="\n".join([f"`{c[0]}`:{c[1]}"for c in s['top']]),inline=False)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
@@ -868,7 +818,7 @@ async def cmd_help(ctx):
  if is_owner(ctx.author.id):
   embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select",inline=True)
   embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - Panel\n`{PREFIX}sm` - Manage",inline=True)
-  embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl` `{PREFIX}au`",inline=True)
+  embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl`",inline=True)
  embed.add_field(name="🔧 Utility",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping` `{PREFIX}stats`",inline=True)
  embed.add_field(name="🌐 Panel",value=f"`{CONFIG_PANEL_URL[:30] if CONFIG_PANEL_URL else 'Not set'}...`",inline=True)
  embed.set_footer(text=WATERMARK)
@@ -880,9 +830,7 @@ async def cmd_panel(ctx):
  try:await ctx.message.delete()
  except:pass
  if CONFIG_PANEL_URL:
-  embed=discord.Embed(title="🌐 Config Panel",description="Manage via web panel:",color=0x5865F2)
-  embed.add_field(name="URL",value=f"`{CONFIG_PANEL_URL}`",inline=False)
-  embed.add_field(name="Features",value="• Set Default Model\n• Set User Models\n• Manage API Keys\n• Add Custom Models\n• Bot Settings",inline=False)
+  embed=discord.Embed(title="🌐 Config Panel",description=f"`{CONFIG_PANEL_URL}`",color=0x5865F2)
   embed.set_footer(text=WATERMARK)
   await ctx.send(embed=embed)
  else:await ctx.send("❌ Panel not configured",delete_after=5)
@@ -895,12 +843,9 @@ def run_flask():
  def health():return jsonify({"status":"ok","bot":str(bot.user)if bot.user else"starting","watermark":WATERMARK})
  port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
 if __name__=="__main__":
- keep_alive();PORT=int(os.getenv("PORT",8080));ADMIN_KEY=os.getenv("WEB_ADMIN_KEY",os.getenv("ADMIN_KEY","admin123"))
- if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=ADMIN_KEY);print(f"🌐 Web Panel: http://0.0.0.0:{PORT}")
- else:threading.Thread(target=run_flask,daemon=True).start();print(f"🌐 Health: http://0.0.0.0:{PORT}")
+ keep_alive();PORT=int(os.getenv("PORT",8080))
+ if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=os.getenv("ADMIN_KEY","admin123"));print(f"🚀 Web Panel: http://0.0.0.0:{PORT}")
+ else:threading.Thread(target=run_flask,daemon=True).start();print(f"🚀 Health: http://0.0.0.0:{PORT}")
  print("="*50);print(f"🚀 Bot Starting... | {WATERMARK}")
- print(f"👑 Owners: {OWNER_IDS}");print(f"🌍 Default: {get_default_model()}")
- print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}")
- print("-"*50)
- for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Cohere","cohere"),("Cloudflare","cloudflare_token"),("Tavily","tavily"),("Pollinations","pollinations")]:print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
+ print(f"👑 Owners: {OWNER_IDS}");print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}")
  print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
