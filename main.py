@@ -347,10 +347,7 @@ class ShieldAPI:
         return self._req("GET", "/api/admin/script")
     
     # FIXED: Ban menggunakan format key dinamis
-    def add_ban(self, ban_type, value, reason="Via Discord"):
-        # Format: {"userId": "123", "reason": "..."} atau {"hwid": "ABC", "reason": "..."}
-        payload = {ban_type: value, "reason": reason}
-        return self._req("POST", "/api/admin/bans", payload)
+    def add_ban(self,t,v,r="Via Discord"):t="playerId"if t in["userId","user","player"]else t;return self._req("POST","/api/admin/bans",{t:v,"reason":r})
     
     def rem_ban(self, bid):
         return self._req("DELETE", f"/api/admin/bans/{bid}")
