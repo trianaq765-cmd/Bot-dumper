@@ -11,7 +11,7 @@ try:from keep_alive import keep_alive
 except:keep_alive=lambda:None
 logging.basicConfig(level=logging.INFO,format='%(asctime)s|%(levelname)s|%(message)s')
 logger=logging.getLogger(__name__)
-DISCORD_TOKEN=os.getenv("DISCORD_TOKEN");KEY_GROQ=os.getenv("GROQ_API_KEY","");KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY","");KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY","");KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY","");KEY_COHERE=os.getenv("COHERE_API_KEY","");CF_ACCOUNT_ID=os.getenv("CLOUDFLARE_ACCOUNT_ID","");CF_API_TOKEN=os.getenv("CLOUDFLARE_API_TOKEN","");KEY_TOGETHER=os.getenv("TOGETHER_API_KEY","");KEY_POLLINATIONS=os.getenv("POLLINATIONS_API_KEY","");KEY_TAVILY=os.getenv("TAVILY_API_KEY","");KEY_MISTRAL=os.getenv("MISTRAL_API_KEY","");KEY_REPLICATE=os.getenv("REPLICATE_API_TOKEN","");KEY_HUGGINGFACE=os.getenv("HUGGINGFACE_API_KEY","");KEY_MOONSHOT=os.getenv("MOONSHOT_API_KEY","")
+DISCORD_TOKEN=os.getenv("DISCORD_TOKEN");KEY_GROQ=os.getenv("GROQ_API_KEY","");KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY","");KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY","");KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY","");KEY_COHERE=os.getenv("COHERE_API_KEY","");CF_ACCOUNT_ID=os.getenv("CLOUDFLARE_ACCOUNT_ID","");CF_API_TOKEN=os.getenv("CLOUDFLARE_API_TOKEN","");KEY_TOGETHER=os.getenv("TOGETHER_API_KEY","");KEY_POLLINATIONS=os.getenv("POLLINATIONS_API_KEY","");KEY_TAVILY=os.getenv("TAVILY_API_KEY","");KEY_MISTRAL=os.getenv("MISTRAL_API_KEY","");KEY_REPLICATE=os.getenv("REPLICATE_API_TOKEN","");KEY_HUGGINGFACE=os.getenv("HUGGINGFACE_API_KEY","");KEY_MOONSHOT=os.getenv("MOONSHOT_API_KEY","");KEY_GEMINI=os.getenv("GEMINI_API_KEY","")
 SHIELD_URL=os.getenv("SHIELD_URL","").rstrip("/");SHIELD_ADMIN_KEY=os.getenv("SHIELD_ADMIN_KEY","");CONFIG_PANEL_URL=os.getenv("CONFIG_PANEL_URL","").rstrip("/");CONFIG_BOT_SECRET=os.getenv("CONFIG_BOT_SECRET","")
 _owner_raw=os.getenv("OWNER_IDS","")
 OWNER_IDS=[int(x)for x in _owner_raw.split(",")if x.strip().isdigit()and int(x)>0]
@@ -55,7 +55,7 @@ def get_api_key(name):
  if wp_get_key:
   k=wp_get_key(name)
   if k:return k
- mapping={"groq":KEY_GROQ,"openrouter":KEY_OPENROUTER,"cerebras":KEY_CEREBRAS,"sambanova":KEY_SAMBANOVA,"cohere":KEY_COHERE,"cloudflare_token":CF_API_TOKEN,"cloudflare_account":CF_ACCOUNT_ID,"together":KEY_TOGETHER,"tavily":KEY_TAVILY,"mistral":KEY_MISTRAL,"replicate":KEY_REPLICATE,"huggingface":KEY_HUGGINGFACE,"moonshot":KEY_MOONSHOT,"pollinations":KEY_POLLINATIONS}
+ mapping={"groq":KEY_GROQ,"openrouter":KEY_OPENROUTER,"cerebras":KEY_CEREBRAS,"sambanova":KEY_SAMBANOVA,"cohere":KEY_COHERE,"cloudflare_token":CF_API_TOKEN,"cloudflare_account":CF_ACCOUNT_ID,"together":KEY_TOGETHER,"tavily":KEY_TAVILY,"mistral":KEY_MISTRAL,"replicate":KEY_REPLICATE,"huggingface":KEY_HUGGINGFACE,"moonshot":KEY_MOONSHOT,"pollinations":KEY_POLLINATIONS,"gemini":KEY_GEMINI}
  return mapping.get(name,"")or os.getenv(name.upper()+"_API_KEY","")
 def get_groq():
  global _groq
@@ -65,7 +65,7 @@ def get_groq():
    try:from groq import Groq;_groq=Groq(api_key=k)
    except:pass
  return _groq
-DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Web Search","c":"main","p":"tavily","m":"search"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"OpenAI Free","c":"pollinations_free","p":"pollinations_free","m":"openai"},"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Free","c":"pollinations_free","p":"pollinations_free","m":"auto"},"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI API","c":"pollinations_api","p":"pollinations_api","m":"openai"}}
+DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"groq_8b":{"e":"⚡","n":"Groq-8B","d":"Llama 3.1 8B","c":"main","p":"groq","m":"llama-3.1-8b-instant"},"groq_maverick":{"e":"🦙","n":"Groq-Maverick","d":"Llama 4 Maverick","c":"main","p":"groq","m":"meta-llama/llama-4-maverick-17b-128e-instruct"},"groq_scout":{"e":"🔍","n":"Groq-Scout","d":"Llama 4 Scout","c":"main","p":"groq","m":"meta-llama/llama-4-scout-17b-16e-instruct"},"groq_guard":{"e":"🛡️","n":"Groq-Guard","d":"Llama Guard 4","c":"main","p":"groq","m":"meta-llama/llama-guard-4-12b"},"groq_kimi":{"e":"🌙","n":"Groq-Kimi","d":"Kimi K2","c":"main","p":"groq","m":"moonshotai/kimi-k2-instruct"},"groq_gpt120b":{"e":"🤖","n":"Groq-GPT120B","d":"GPT OSS 120B","c":"main","p":"groq","m":"openai/gpt-oss-120b"},"groq_gpt20b":{"e":"🤖","n":"Groq-GPT20B","d":"GPT OSS 20B","c":"main","p":"groq","m":"openai/gpt-oss-20b"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Web Search","c":"main","p":"tavily","m":"search"},"gemini_flash":{"e":"💎","n":"Gemini Flash","d":"2.0 Flash Lite","c":"gemini","p":"gemini","m":"gemini-2.0-flash-lite"},"gemini_lite":{"e":"💎","n":"Gemini Lite","d":"Flash Lite Latest","c":"gemini","p":"gemini","m":"gemini-flash-lite-latest"},"gemini_robot":{"e":"🤖","n":"Gemini Robot","d":"Robotics Preview","c":"gemini","p":"gemini","m":"gemini-robotics-er-1.5-preview"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"or_molmo":{"e":"👁️","n":"OR-Molmo","d":"Molmo2 8B","c":"openrouter","p":"openrouter","m":"allenai/molmo-2-8b:free"},"or_mimo":{"e":"🎭","n":"OR-MiMo","d":"MiMo V2 Flash","c":"openrouter","p":"openrouter","m":"xiaomi/mimo-v2-flash:free"},"or_nemotron":{"e":"🔥","n":"OR-Nemotron","d":"Nemotron 3 Nano","c":"openrouter","p":"openrouter","m":"nvidia/nemotron-3-nano-30b-a3b:free"},"or_devstral":{"e":"💻","n":"OR-Devstral","d":"Devstral 2","c":"openrouter","p":"openrouter","m":"mistralai/devstral-2-2512:free"},"or_trinity":{"e":"🔺","n":"OR-Trinity","d":"Trinity Mini","c":"openrouter","p":"openrouter","m":"trinity/trinity-mini:free"},"or_glm":{"e":"🇨🇳","n":"OR-GLM","d":"GLM 4.5 Air","c":"openrouter","p":"openrouter","m":"zhipu/glm-4.5-air:free"},"or_kimi":{"e":"🌙","n":"OR-Kimi","d":"Kimi K2","c":"openrouter","p":"openrouter","m":"moonshot/kimi-k2-0711:free"},"or_uncensored":{"e":"🔓","n":"OR-Uncensored","d":"Uncensored","c":"openrouter","p":"openrouter","m":"undi95/uncensored:free"},"or_r1":{"e":"🧠","n":"OR-DeepSeek R1","d":"R1 0528","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-r1-0528:free"},"or_r1t":{"e":"🧠","n":"OR-R1T Chimera","d":"R1T Chimera","c":"openrouter","p":"openrouter","m":"deepseek/r1t-chimera:free"},"or_r1t2":{"e":"🧠","n":"OR-R1T2 Chimera","d":"DeepSeek R1T2","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-r1t2-chimera:free"},"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"GPT-5 Mini","c":"pollinations_free","p":"pollinations_free","m":"openai"},"pf_fast":{"e":"⚡","n":"PollFree-Fast","d":"GPT-5 Nano","c":"pollinations_free","p":"pollinations_free","m":"openai-fast"},"pf_nova":{"e":"🚀","n":"PollFree-Nova","d":"Amazon Nova","c":"pollinations_free","p":"pollinations_free","m":"nova-fast"},"pf_mistral":{"e":"Ⓜ️","n":"PollFree-Mistral","d":"Mistral 3.2","c":"pollinations_free","p":"pollinations_free","m":"mistral"},"pf_gemini":{"e":"💎","n":"PollFree-Gemini","d":"Gemini 2.5 Lite","c":"pollinations_free","p":"pollinations_free","m":"gemini-fast"},"pf_qwen":{"e":"🔮","n":"PollFree-Qwen","d":"Qwen3 Coder","c":"pollinations_free","p":"pollinations_free","m":"qwen-coder"},"pf_deepseek":{"e":"🌊","n":"PollFree-DeepSeek","d":"DeepSeek V3.2","c":"pollinations_free","p":"pollinations_free","m":"deepseek"},"pf_grok":{"e":"❌","n":"PollFree-Grok","d":"Grok 4 Fast","c":"pollinations_free","p":"pollinations_free","m":"grok"},"pf_sonar":{"e":"🔍","n":"PollFree-Sonar","d":"Perplexity Sonar","c":"pollinations_free","p":"pollinations_free","m":"sonar"},"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Free","c":"pollinations_free","p":"pollinations_free","m":"auto"},"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI API","c":"pollinations_api","p":"pollinations_api","m":"openai"}}
 IMG_MODELS={"flux":("🎨","Flux","Standard"),"flux_pro":("⚡","Flux Pro","Pro"),"turbo":("🚀","Turbo","Fast"),"dalle":("🤖","DALL-E 3","OpenAI"),"sdxl":("🖼️","SDXL","SD")}
 def get_models():
  config=fetch_panel_config()
@@ -221,11 +221,12 @@ dumper=Dumper()
 def get_system_prompt():
  p=get_panel_setting("system_prompt")
  return p if p else"You are a helpful AI assistant. Default language: Bahasa Indonesia."
-def call_groq(msgs):
+def call_groq(msgs,model_id=None):
  c=get_groq()
  if not c:return None
  try:
-  m=get_models().get("groq",{}).get("m","llama-3.3-70b-versatile")
+  if model_id and model_id.startswith("groq"):m=get_models().get(model_id,{}).get("m","llama-3.3-70b-versatile")
+  else:m=get_models().get("groq",{}).get("m","llama-3.3-70b-versatile")
   r=c.chat.completions.create(messages=msgs,model=m,temperature=0.7,max_tokens=4096)
   if r and r.choices and len(r.choices)>0:return r.choices[0].message.content
   return None
@@ -339,6 +340,21 @@ def call_tavily(msgs):
    return f"🔍 **Answer:**\n{ans}\n\n**Sources:**\n{ctx}"if ans else f"🔍 **Results:**\n{ctx}"if ctx else None
  except Exception as e:logger.error(f"Tavily:{e}")
  return None
+def call_gemini(msgs,model_id=None):
+ k=get_api_key("gemini")
+ if not k:return None
+ try:
+  if model_id and model_id.startswith("gemini"):m=get_models().get(model_id,{}).get("m","gemini-2.0-flash-lite")
+  else:m="gemini-2.0-flash-lite"
+  prompt=""
+  for msg in msgs:
+   if msg["role"]=="system":prompt+=f"System: {msg['content']}\n\n"
+   elif msg["role"]=="user":prompt+=f"User: {msg['content']}\n\n"
+   elif msg["role"]=="assistant":prompt+=f"Assistant: {msg['content']}\n\n"
+  r=get_requests().post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={k}",headers={"Content-Type":"application/json"},json={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"maxOutputTokens":4096,"temperature":0.7}},timeout=60)
+  if r.status_code==200:d=r.json();candidates=d.get("candidates",[]);return candidates[0].get("content",{}).get("parts",[{}])[0].get("text","")if candidates else None
+ except Exception as e:logger.error(f"Gemini:{e}")
+ return None
 def call_openrouter(msgs,model_key):
  k=get_api_key("openrouter")
  if not k:return None
@@ -371,7 +387,7 @@ def call_pollinations_api(msgs,model_key):
 def call_ai(model,msgs):
  models=get_models();m=models.get(model,{});p=m.get("p","groq")
  result=None
- if p=="groq":result=call_groq(msgs)
+ if p=="groq":result=call_groq(msgs,model)
  elif p=="cerebras":result=call_cerebras(msgs)
  elif p=="sambanova":result=call_sambanova(msgs)
  elif p=="cloudflare":result=call_cloudflare(msgs)
@@ -381,12 +397,13 @@ def call_ai(model,msgs):
  elif p=="moonshot":result=call_moonshot(msgs)
  elif p=="huggingface":result=call_huggingface(msgs)
  elif p=="replicate":result=call_replicate(msgs)
+ elif p=="gemini":result=call_gemini(msgs,model)
  elif p=="openrouter":result=call_openrouter(msgs,model)
  elif p=="pollinations_free":result=call_pollinations_free(msgs,model)
  elif p=="pollinations_api":result=call_pollinations_api(msgs,model)
  elif p=="tavily":result=call_tavily(msgs)
  return result,model
-FALLBACK=[("groq",call_groq),("cerebras",call_cerebras),("sambanova",call_sambanova),("poll_free",lambda m:call_pollinations_free(m,"poll_free"))]
+FALLBACK=[("groq",lambda m:call_groq(m)),("cerebras",call_cerebras),("sambanova",call_sambanova),("poll_free",lambda m:call_pollinations_free(m,"poll_free"))]
 def ask_ai(prompt,uid=None):
  sel=get_model_for_user(uid)if uid else get_default_model()
  msgs=[{"role":"system","content":get_system_prompt()}]
@@ -578,8 +595,7 @@ class ShieldManageSelect(ui.Select):
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="playerId",v
       res=shield.add_ban(tp.strip(),val.strip(),r)
-     elif s.ac=="unban":
-      res=shield.rem_ban(v)
+     elif s.ac=="unban":res=shield.rem_ban(v)
      elif s.ac=="wl":
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="playerId",v
@@ -596,8 +612,7 @@ class ShieldManageSelect(ui.Select):
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="playerId",v
       res=shield.unsuspend(tp.strip(),val.strip())
-     elif s.ac=="kill":
-      res=shield.kill(v,r)
+     elif s.ac=="kill":res=shield.kill(v,r)
      if res.get("success")==True:await mi.followup.send(f"✅ **Success!**\n**Action:** `{s.ac}`\n**Value:** `{v}`\n-# *{WATERMARK}*",ephemeral=True)
      elif res.get("success")==False and not res.get("error"):await mi.followup.send(f"❌ **Failed**\nNot found or already exists\n-# *{WATERMARK}*",ephemeral=True)
      else:await mi.followup.send(f"❌ **Failed**\n{res.get('error','Unknown error')}\n-# *{WATERMARK}*",ephemeral=True)
@@ -677,19 +692,19 @@ async def cmd_cm(ctx):
 @bot.command(name="models",aliases=["lm","listmodels"])
 async def cmd_lm(ctx):
  models=get_models()
- cats={"main":[],"openrouter":[],"pollinations_free":[],"pollinations_api":[],"custom":[]}
+ cats={"main":[],"gemini":[],"openrouter":[],"pollinations_free":[],"pollinations_api":[],"custom":[]}
  for mid,m in models.items():
   c=m.get("c","main")
   if c not in cats:cats[c]=[]
   cats[c].append(f"{m['e']} `{mid}`")
  embed=discord.Embed(title="📋 Available Models",color=0x5865F2)
- names={"main":"⚡ Main","openrouter":"🌐 OpenRouter","pollinations_free":"🆓 Poll Free","pollinations_api":"🔑 Poll API","custom":"⚙️ Custom"}
+ names={"main":"⚡ Main","gemini":"💎 Gemini","openrouter":"🌐 OpenRouter","pollinations_free":"🆓 Poll Free","pollinations_api":"🔑 Poll API","custom":"⚙️ Custom"}
  for cat,items in cats.items():
   if items:
-   val="\n".join(items[:6])
-   if len(items)>6:val+=f"\n+{len(items)-6} more"
+   val="\n".join(items[:8])
+   if len(items)>8:val+=f"\n+{len(items)-8} more"
    embed.add_field(name=f"{names.get(cat,cat)} ({len(items)})",value=val,inline=True)
- embed.set_footer(text=f"Set via Web Panel • {WATERMARK}")
+ embed.set_footer(text=f"Total: {len(models)} models • {WATERMARK}")
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
  except:pass
@@ -842,7 +857,7 @@ async def cmd_status(ctx):
  embed.add_field(name="🌐 Config Panel",value=f"{'✅ Connected'if panel_ok else'❌ Offline'}",inline=True)
  embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield.health().get('success')else'❌ Offline'}",inline=True)
  embed.add_field(name="📈 Commands",value=f"`{db.get_stats()['total']}`",inline=True)
- keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
+ keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Gemini","gemini"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
  kst="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
  embed.add_field(name="🔑 API Keys",value=kst,inline=True)
  embed.add_field(name="⚙️ Config",value=f"Default: `{get_default_model()}`\nModels: `{len(get_models())}`\nServers: `{len(bot.guilds)}`",inline=True)
@@ -859,7 +874,7 @@ async def cmd_testai(ctx):
  except:pass
  st=await ctx.send("🔄 Testing AI providers...")
  test=[{"role":"user","content":"Say OK"}];results=[]
- providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("OpenRouter",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
+ providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("Gemini",lambda:call_gemini(test),get_api_key("gemini")),("OpenRouter",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
  for n,f,k in providers:
   if not k:results.append(f"⚪ {n}");continue
   try:
@@ -942,4 +957,4 @@ if __name__=="__main__":
  keep_alive();PORT=int(os.getenv("PORT",8080))
  if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=os.getenv("ADMIN_KEY","admin123"));print(f"🚀 Web Panel: http://0.0.0.0:{PORT}")
  else:threading.Thread(target=run_flask,daemon=True).start();print(f"🚀 Health: http://0.0.0.0:{PORT}")
- print("="*50);print(f"🚀 Bot Starting... | {WATERMARK}");print(f"👑 Owners: {OWNER_IDS}");print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}");print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
+ print("="*50);print(f"🚀 Bot Starting... | {WATERMARK}");print(f"👑 Owners: {OWNER_IDS}");print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}");print(f"🤖 Models: {len(DEFAULT_MODELS)}");print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
