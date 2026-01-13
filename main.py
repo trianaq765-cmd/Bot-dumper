@@ -952,26 +952,21 @@ def run_flask():
  @fapp.route('/')
  def home():return f"Bot {bot.user} running! | {WATERMARK}"if bot.user else"Starting..."
  @fapp.route('/health')
- def health():return jsonify({"status":"ok","bot_ready":bot.user is not None})
- fapp.run(host="0.0.0.0",port=int(os.getenv("PORT",8080)),debug=False,use_reloader=False,threaded=True)
-def run_panel():
- if HAS_WEB_PANEL and start_web_panel:
-  try:start_web_panel(host="0.0.0.0",port=int(os.getenv("PORT",8080)),admin_key=os.getenv("ADMIN_KEY","admin123"))
-  except Exception as e:print(f"❌ Panel error: {e}")
+ def health():return jsonify({"status":"ok"})
+ fapp.run(host="0.0.0.0",port=int(os.getenv("PORT",8080)),debug=False,use_reloader=False)
 if __name__=="__main__":
  PORT=int(os.getenv("PORT",8080))
- if HAS_WEB_PANEL and start_web_panel:
-  threading.Thread(target=run_panel,daemon=True).start()
-  print(f"🌐 Web Panel starting on port {PORT}...")
+ print("="*50)
+ if HAS_WEB_PANEL:
+  print(f"🌐 Starting Web Panel on port {PORT}...")
+  threading.Thread(target=lambda:start_web_panel(host="0.0.0.0",port=PORT,admin_key=os.getenv("ADMIN_KEY","admin123")),daemon=True).start()
  else:
+  print(f"⚠️ Web Panel not available, using Flask...")
   keep_alive()
   threading.Thread(target=run_flask,daemon=True).start()
-  print(f"🚀 Flask Health on port {PORT}")
- print("="*50)
  print(f"🚀 Bot Starting... | {WATERMARK}")
  print(f"👑 Owners: {OWNER_IDS}")
  print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}")
- print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}")
  print(f"🤖 Models: {len(DEFAULT_MODELS)}")
  print("="*50)
  bot.run(DISCORD_TOKEN,log_handler=None)
