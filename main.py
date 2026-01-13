@@ -309,7 +309,6 @@ class ShieldAPI:
                 except ValueError:
                     return {"success": True}
             
-            # Capture error message from response
             try:
                 err_data = r.json()
                 return {"success": False, "error": f"HTTP {r.status_code}: {err_data.get('message', err_data.get('error', 'Unknown'))}"}
@@ -347,29 +346,27 @@ class ShieldAPI:
     def script(self):
         return self._req("GET", "/api/admin/script")
     
-    # FIXED: Proper payload format untuk add_ban
+    # FIXED: Ban menggunakan format key dinamis
     def add_ban(self, ban_type, value, reason="Via Discord"):
-        return self._req("POST", "/api/admin/bans", {
-            "type": ban_type,
-            "value": value,
-            "reason": reason
-        })
+        # Format: {"userId": "123", "reason": "..."} atau {"hwid": "ABC", "reason": "..."}
+        payload = {ban_type: value, "reason": reason}
+        return self._req("POST", "/api/admin/bans", payload)
     
     def rem_ban(self, bid):
         return self._req("DELETE", f"/api/admin/bans/{bid}")
     
+    # FIXED: Whitelist menggunakan format key dinamis
     def add_wl(self, wl_type, value):
-        return self._req("POST", "/api/admin/whitelist", {
-            "type": wl_type,
-            "value": value
-        })
+        # Format: {"userId": "123"} atau {"hwid": "ABC"}
+        payload = {wl_type: value}
+        return self._req("POST", "/api/admin/whitelist", payload)
     
     def rem_wl(self, wl_type, value):
-        return self._req("POST", "/api/admin/whitelist/remove", {
-            "type": wl_type,
-            "value": value
-        })
+        # Format: {"userId": "123"} atau {"hwid": "ABC"}
+        payload = {wl_type: value}
+        return self._req("POST", "/api/admin/whitelist/remove", payload)
     
+    # Suspend/Unsuspend tetap menggunakan format type/value (sudah benar)
     def suspend(self, sus_type, value, reason="Via Discord"):
         return self._req("POST", "/api/admin/suspend", {
             "type": sus_type,
