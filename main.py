@@ -440,69 +440,103 @@ class ShieldInfoSelect(ui.Select):
   await i.response.defer(ephemeral=True);a=self.values[0];embed=discord.Embed(color=0x3498DB)
   try:
    if a=="stats":
-    d=shield.stats();embed.title="📊 Stats"
+    d=shield.stats();embed.title="📊 Shield Stats"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     elif isinstance(d,dict):
      c=0
      for k,v in d.items():
-      if k not in["success","error","message"]and c<15:embed.add_field(name=str(k).title(),value=f"`{str(v)[:50]}`",inline=True);c+=1
+      if k not in["success","error","message"]and c<15:embed.add_field(name=str(k).replace("_"," ").title(),value=f"`{str(v)[:50]}`",inline=True);c+=1
    elif a=="sessions":
-    d=shield.sessions();embed.title="🔄 Sessions"
+    d=shield.sessions();embed.title="🔄 Active Sessions"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
      ss=d.get("sessions",d if isinstance(d,list)else[])
      if ss:
-      for idx,s in enumerate(ss[:8]):embed.add_field(name=f"#{idx+1}",value=f"ID:`{str(s.get('id','?'))[:10]}`\nUser:`{str(s.get('userId','?'))[:10]}`",inline=True)
-     else:embed.description="None"
+      for idx,s in enumerate(ss[:8]):
+       sid=str(s.get('id',s.get('sessionId','?')))[:8]
+       uid=str(s.get('userId',s.get('playerId','?')))[:12]
+       embed.add_field(name=f"🔹 {sid}",value=f"**Player:** `{uid}`",inline=True)
+     else:embed.description="No active sessions"
    elif a=="logs":
-    d=shield.logs();embed.title="📋 Logs"
+    d=shield.logs();embed.title="📋 Recent Logs"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
      ll=d.get("logs",d if isinstance(d,list)else[])
      if ll:
       txt=[]
-      for l in ll[:8]:txt.append(f"`{l.get('time','?')[:16]}` {l.get('service','?')}")
+      for l in ll[:10]:
+       ts=str(l.get('time',l.get('timestamp','')))[:16]
+       svc=l.get('service',l.get('type','?'))
+       msg=str(l.get('message',''))[:30]
+       txt.append(f"`{ts}` **{svc}** {msg}")
       embed.description="\n".join(txt)[:4096]
-     else:embed.description="None"
+     else:embed.description="No logs"
    elif a=="bans":
-    d=shield.bans();embed.title="🚫 Bans"
+    d=shield.bans();embed.title="🚫 Ban List"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
      bb=d.get("bans",d if isinstance(d,list)else[])
      if bb:
-      for idx,b in enumerate(bb[:8]):embed.add_field(name=f"Ban:{b.get('banId','?')[:8]}",value=f"HWID:`{str(b.get('hwid',''))[:8]}`\nPlayer:`{str(b.get('playerId',''))[:10]}`",inline=True)
-     else:embed.description="None"
+      for b in bb[:9]:
+       bid=str(b.get('banId','?'))[:8]
+       hwid=b.get('hwid','')
+       pid=b.get('playerId','')
+       ip=b.get('ip','')
+       reason=str(b.get('reason',''))[:20]
+       if hwid:btype="HWID";bval=str(hwid)[:15]
+       elif pid:btype="Player";bval=str(pid)[:15]
+       elif ip:btype="IP";bval=str(ip)[:15]
+       else:btype="?";bval="?"
+       embed.add_field(name=f"🔴 {bid}",value=f"**{btype}:** `{bval}`\n{reason}",inline=True)
+     else:embed.description="No bans"
    elif a=="wl":
     d=shield.whitelist();embed.title="✅ Whitelist"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
      wl=d.get("whitelist",d if isinstance(d,list)else[])
      if wl:
-      for idx,w in enumerate(wl[:8]):embed.add_field(name=f"#{idx+1}",value=f"`{str(w.get('value',w))[:20]}`",inline=True)
-     else:embed.description="None"
+      for idx,w in enumerate(wl[:9]):
+       if isinstance(w,dict):
+        hwid=w.get('hwid','')
+        pid=w.get('playerId','')
+        ip=w.get('ip','')
+        if hwid:wtype="HWID";wval=str(hwid)[:15]
+        elif pid:wtype="Player";wval=str(pid)[:15]
+        elif ip:wtype="IP";wval=str(ip)[:15]
+        else:wtype="?";wval=str(w.get('value','?'))[:15]
+       else:wtype="Value";wval=str(w)[:15]
+       embed.add_field(name=f"✅ #{idx+1}",value=f"**{wtype}:** `{wval}`",inline=True)
+     else:embed.description="No whitelist entries"
    elif a=="sus":
-    d=shield.suspended();embed.title="⏸️ Suspended"
+    d=shield.suspended();embed.title="⏸️ Suspended Users"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
      sus=d.get("suspended",d if isinstance(d,list)else[])
      if sus:
-      for idx,s in enumerate(sus[:8]):embed.add_field(name=f"#{idx+1}",value=f"`{str(s.get('value',s))[:20]}`",inline=True)
-     else:embed.description="None"
+      for idx,s in enumerate(sus[:9]):
+       if isinstance(s,dict):
+        stype=s.get('type','?')
+        sval=str(s.get('value',s.get('playerId',s.get('hwid','?'))))[:15]
+        reason=str(s.get('reason',''))[:20]
+       else:stype="?";sval=str(s)[:15];reason=""
+       embed.add_field(name=f"⏸️ #{idx+1}",value=f"**{stype}:** `{sval}`\n{reason}",inline=True)
+     else:embed.description="No suspended users"
    elif a=="health":
-    d=shield.health();embed.title="💚 Health"
-    embed.description="✅ Online"if d.get("success")else"❌ Offline"
+    d=shield.health();embed.title="💚 Shield Health"
+    if d.get("success"):embed.description="✅ **Shield is ONLINE**";embed.color=0x2ECC71
+    else:embed.description="❌ **Shield is OFFLINE**";embed.color=0xE74C3C
    elif a=="botstats":
-    s=db.get_stats();embed.title="📈 Bot Stats"
-    embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
-    embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
-    embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
+    s=db.get_stats();embed.title="📈 Bot Statistics"
+    embed.add_field(name="📊 Total Commands",value=f"`{s['total']}`",inline=True)
+    embed.add_field(name="📅 Today",value=f"`{s['today']}`",inline=True)
+    embed.add_field(name="👥 Unique Users",value=f"`{s['users']}`",inline=True)
    elif a=="script":
     d=shield.script()
     if d.get("script"):
      f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua")
-     return await i.followup.send("📜 **Script:**",file=f,ephemeral=True)
-    else:embed.description="❌ Not available"
-  except Exception as e:embed.description=f"Error: {str(e)[:100]}"
+     return await i.followup.send("📜 **Loader Script:**",file=f,ephemeral=True)
+    else:embed.description="❌ Script not available"
+  except Exception as e:embed.description=f"❌ Error: {str(e)[:100]}"
   embed.set_footer(text=WATERMARK)
   await i.followup.send(embed=embed,ephemeral=True)
 class ShieldActionSelect(ui.Select):
@@ -516,20 +550,21 @@ class ShieldActionSelect(ui.Select):
   elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
   elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
   else:r={"success":False};msg="Unknown"
-  await i.followup.send(f"✅ {msg}"if r.get("success")else"❌ Failed",ephemeral=True)
+  await i.followup.send(f"✅ {msg}"if r.get("success")else f"❌ Failed: {r.get('error','Unknown')}",ephemeral=True)
 class ShieldView(ui.View):
  def __init__(self):super().__init__(timeout=180);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
  def __init__(self):
-  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="playerId/hwid/ip:value"),discord.SelectOption(label="Unban",value="unban",emoji="🔓",description="Ban ID (hex from list)"),discord.SelectOption(label="Whitelist",value="wl",emoji="✅",description="playerId/hwid/ip:value"),discord.SelectOption(label="Remove WL",value="rem_wl",emoji="➖",description="playerId/hwid/ip:value"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="type:value"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="type:value"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Session ID")]
+  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="playerId/hwid/ip:value"),discord.SelectOption(label="Unban",value="unban",emoji="🔓",description="Ban ID (hex from list)"),discord.SelectOption(label="Whitelist Add",value="wl",emoji="✅",description="playerId/hwid/ip:value"),discord.SelectOption(label="Whitelist Remove",value="rem_wl",emoji="➖",description="playerId/hwid/ip:value"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="type:value"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="type:value"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Session ID")]
   super().__init__(placeholder="⚙️ Select Action...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   a=self.values[0]
-  if a=="unban":t="Unban";l="Ban ID (Hex)";p="Example: A1B2C3D4E5F6"
-  elif a=="kill":t="Kill Session";l="Session ID";p="Enter Session ID"
-  elif a in["wl","rem_wl","sus","unsus"]:t="Manage User";l="Type:Value";p="playerId:123 or hwid:ABC"
-  else:t="Ban User";l="Type:Value";p="playerId:123 or hwid:ABC"
+  if a=="unban":t="Unban User";l="Ban ID (Hex)";p="Example: A1B2C3D4"
+  elif a=="kill":t="Kill Session";l="Session ID";p="From session list"
+  elif a in["wl","rem_wl"]:t="Whitelist";l="Type:Value";p="playerId:123 or hwid:ABC"
+  elif a in["sus","unsus"]:t="Suspend";l="Type:Value";p="playerId:123 or hwid:ABC"
+  else:t="Ban User";l="Type:Value";p="playerId:123 or hwid:ABC or ip:1.2.3.4"
   class SM(ui.Modal,title=t):
    val=ui.TextInput(label=l,placeholder=p,required=True)
    reason=ui.TextInput(label="Reason",required=False,default="Via Discord")
@@ -543,19 +578,29 @@ class ShieldManageSelect(ui.Select):
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="playerId",v
       res=shield.add_ban(tp.strip(),val.strip(),r)
-     elif s.ac=="unban":res=shield.rem_ban(v)
-     elif s.ac in["wl","rem_wl","sus","unsus"]:
+     elif s.ac=="unban":
+      res=shield.rem_ban(v)
+     elif s.ac=="wl":
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="playerId",v
-      tp,val=tp.strip(),val.strip()
-      if s.ac=="wl":res=shield.add_wl(tp,val)
-      elif s.ac=="rem_wl":res=shield.rem_wl(tp,val)
-      elif s.ac=="sus":res=shield.suspend(tp,val,r)
-      elif s.ac=="unsus":res=shield.unsuspend(tp,val)
-     elif s.ac=="kill":res=shield.kill(v,r)
-     if res.get("success")==True:await mi.followup.send(f"✅ **Success!**\nAction: `{s.ac}`\nValue: `{v}`\n-# *{WATERMARK}*",ephemeral=True)
-     elif res.get("success")==False and not res.get("error"):await mi.followup.send(f"❌ **Failed**\nNot found or invalid\n-# *{WATERMARK}*",ephemeral=True)
-     else:await mi.followup.send(f"❌ **Failed**\nError: {res.get('error','Unknown')}\n-# *{WATERMARK}*",ephemeral=True)
+      res=shield.add_wl(tp.strip(),val.strip())
+     elif s.ac=="rem_wl":
+      if":"in v:tp,val=v.split(":",1)
+      else:tp,val="playerId",v
+      res=shield.rem_wl(tp.strip(),val.strip())
+     elif s.ac=="sus":
+      if":"in v:tp,val=v.split(":",1)
+      else:tp,val="playerId",v
+      res=shield.suspend(tp.strip(),val.strip(),r)
+     elif s.ac=="unsus":
+      if":"in v:tp,val=v.split(":",1)
+      else:tp,val="playerId",v
+      res=shield.unsuspend(tp.strip(),val.strip())
+     elif s.ac=="kill":
+      res=shield.kill(v,r)
+     if res.get("success")==True:await mi.followup.send(f"✅ **Success!**\n**Action:** `{s.ac}`\n**Value:** `{v}`\n-# *{WATERMARK}*",ephemeral=True)
+     elif res.get("success")==False and not res.get("error"):await mi.followup.send(f"❌ **Failed**\nNot found or already exists\n-# *{WATERMARK}*",ephemeral=True)
+     else:await mi.followup.send(f"❌ **Failed**\n{res.get('error','Unknown error')}\n-# *{WATERMARK}*",ephemeral=True)
     except Exception as e:await mi.followup.send(f"❌ **Error:** {str(e)[:100]}",ephemeral=True)
   await i.response.send_modal(SM(a))
 class ShieldManageView(ui.View):
@@ -567,7 +612,7 @@ class ImgSelect(ui.Select):
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   db.set_img(i.user.id,self.values[0]);v=IMG_MODELS.get(self.values[0],("?","?",""))
-  await i.response.send_message(f"✅ Image: {v[0]} **{v[1]}**",ephemeral=True)
+  await i.response.send_message(f"✅ Image model: {v[0]} **{v[1]}**",ephemeral=True)
 class ImgView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(ImgSelect())
 @bot.event
@@ -678,8 +723,8 @@ async def cmd_img(ctx,*,prompt:str=None):
    embed.set_image(url="attachment://image.png")
    embed.set_footer(text=f"{info[0]} {info[1]} • {WATERMARK}")
    await ctx.send(embed=embed,file=f);await st.delete();db.stat("img",ctx.author.id)
-  else:await st.edit(content=f"❌ Failed:{err}")
- except Exception as e:await st.edit(content=f"❌ Error:{str(e)[:50]}")
+  else:await st.edit(content=f"❌ Failed: {err}")
+ except Exception as e:await st.edit(content=f"❌ Error: {str(e)[:50]}")
 @bot.command(name="imgmodel",aliases=["im"])
 async def cmd_im(ctx):
  if not is_owner(ctx.author.id):
@@ -728,9 +773,9 @@ async def cmd_shield(ctx):
  try:await ctx.message.delete()
  except:pass
  st=shield.health()
- embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
- embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
- embed.add_field(name="URL",value=f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
+ embed=discord.Embed(title="🛡️ Shield Control Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
+ embed.add_field(name="Status",value="🟢 **ONLINE**"if st.get("success")else"🔴 **OFFLINE**",inline=True)
+ embed.add_field(name="URL",value=f"`{SHIELD_URL[:30]}...`"if len(SHIELD_URL)>30 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldView())
 @bot.command(name="shieldm",aliases=["sm"])
@@ -743,9 +788,9 @@ async def cmd_sm(ctx):
  try:await ctx.message.delete()
  except:pass
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
- embed.add_field(name="Ban/WL Format",value="`type:value`\nEx:`hwid:ABC123`",inline=True)
- embed.add_field(name="Types",value="`playerId`,`hwid`,`ip`",inline=True)
- embed.add_field(name="Unban",value="Use Ban ID (hex)\nfrom ban list",inline=True)
+ embed.add_field(name="📝 Format",value="`type:value`\nEx: `hwid:ABC123`\nEx: `playerId:12345`",inline=True)
+ embed.add_field(name="📋 Types",value="`playerId`\n`hwid`\n`ip`",inline=True)
+ embed.add_field(name="ℹ️ Unban",value="Use **Ban ID** (hex)\nfrom `.sh` → Bans",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
@@ -757,15 +802,16 @@ async def cmd_sync(ctx):
   return
  try:await ctx.message.delete()
  except:pass
- st=await ctx.send("🔄 Syncing...")
+ st=await ctx.send("🔄 Syncing config...")
  config=fetch_panel_config(force=True)
  if config and config.get("last_fetch",0)>0:
   embed=discord.Embed(title="✅ Config Synced",color=0x2ECC71)
   embed.add_field(name="🔑 Keys",value=f"`{len(config.get('keys',{}))}`",inline=True)
   embed.add_field(name="🤖 Models",value=f"`{len(config.get('models',{}))}`",inline=True)
+  embed.add_field(name="👥 User Models",value=f"`{len(config.get('user_models',{}))}`",inline=True)
   embed.set_footer(text=WATERMARK)
   await st.edit(content=None,embed=embed)
- else:await st.edit(content="❌ Failed to sync")
+ else:await st.edit(content="❌ Failed to sync - check CONFIG_PANEL_URL")
 @bot.command(name="clear",aliases=["reset"])
 async def cmd_clear(ctx):
  mem.clear(ctx.author.id)
@@ -792,14 +838,14 @@ async def cmd_status(ctx):
  try:await ctx.message.delete()
  except:pass
  config=fetch_panel_config();panel_ok=config and config.get("last_fetch",0)>0
- embed=discord.Embed(title="📊 Status",color=0x5865F2)
- embed.add_field(name="🌐 Panel",value=f"{'✅ Connected'if panel_ok else'❌ Offline'}",inline=True)
+ embed=discord.Embed(title="📊 Bot Status",color=0x5865F2)
+ embed.add_field(name="🌐 Config Panel",value=f"{'✅ Connected'if panel_ok else'❌ Offline'}",inline=True)
  embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield.health().get('success')else'❌ Offline'}",inline=True)
  embed.add_field(name="📈 Commands",value=f"`{db.get_stats()['total']}`",inline=True)
  keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
  kst="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
- embed.add_field(name="🔑 Keys",value=kst,inline=True)
- embed.add_field(name="⚙️ Config",value=f"Default:`{get_default_model()}`\nModels:`{len(get_models())}`\nServers:`{len(bot.guilds)}`",inline=True)
+ embed.add_field(name="🔑 API Keys",value=kst,inline=True)
+ embed.add_field(name="⚙️ Config",value=f"Default: `{get_default_model()}`\nModels: `{len(get_models())}`\nServers: `{len(bot.guilds)}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
 @bot.command(name="testai")
@@ -811,17 +857,17 @@ async def cmd_testai(ctx):
   return
  try:await ctx.message.delete()
  except:pass
- st=await ctx.send("🔄 Testing providers...")
+ st=await ctx.send("🔄 Testing AI providers...")
  test=[{"role":"user","content":"Say OK"}];results=[]
- providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
+ providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("OpenRouter",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
  for n,f,k in providers:
-  if not k:results.append(f"⚪{n}");continue
+  if not k:results.append(f"⚪ {n}");continue
   try:
    loop=asyncio.get_event_loop()
    r=await loop.run_in_executor(executor,f)
-   results.append(f"✅{n}"if r else f"❌{n}")
-  except:results.append(f"❌{n}")
- embed=discord.Embed(title="🧪 AI Test",description=" | ".join(results),color=0x5865F2)
+   results.append(f"✅ {n}"if r else f"❌ {n}")
+  except:results.append(f"❌ {n}")
+ embed=discord.Embed(title="🧪 AI Provider Test",description="\n".join(results),color=0x5865F2)
  embed.set_footer(text=WATERMARK)
  await st.edit(content=None,embed=embed)
 @bot.command(name="blacklist",aliases=["bl","ban"])
@@ -844,34 +890,34 @@ async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
  if not user:return await ctx.send(f"Usage:`{PREFIX}au @user model1,model2`",delete_after=10)
  if not models:
   curr=db.get_allowed(user.id)
-  return await ctx.send(f"📋 {user.mention}:`{','.join(curr)or'None'}`\n-# *{WATERMARK}*",delete_after=10)
+  return await ctx.send(f"📋 {user.mention}: `{','.join(curr)or'None'}`\n-# *{WATERMARK}*",delete_after=10)
  if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user.mention}\n-# *{WATERMARK}*",delete_after=5)
  all_m=list(get_models().keys())
  valid=[m.strip()for m in models.split(",")if m.strip()in all_m]
  if not valid:return await ctx.send("❌ Invalid models",delete_after=5)
- db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}:`{','.join(valid)}`\n-# *{WATERMARK}*",delete_after=5)
+ db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}: `{','.join(valid)}`\n-# *{WATERMARK}*",delete_after=5)
 @bot.command(name="stats")
 async def cmd_stats(ctx):
  s=db.get_stats()
  embed=discord.Embed(title="📈 Bot Statistics",color=0x5865F2)
- embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
- embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
- embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
+ embed.add_field(name="📊 Total Commands",value=f"`{s['total']}`",inline=True)
+ embed.add_field(name="📅 Today",value=f"`{s['today']}`",inline=True)
+ embed.add_field(name="👥 Unique Users",value=f"`{s['users']}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
  except:pass
 @bot.command(name="help",aliases=["h"])
 async def cmd_help(ctx):
- embed=discord.Embed(title="📚 Help",color=0x5865F2)
- embed.add_field(name="💬 AI",value=f"`{PREFIX}ai <text>`\n`@{bot.user.name} <text>`",inline=False)
- embed.add_field(name="🤖 Models",value=f"`{PREFIX}cm` - Current\n`{PREFIX}models` - List\n*Set via Web Panel*",inline=True)
+ embed=discord.Embed(title="📚 Bot Help",color=0x5865F2)
+ embed.add_field(name="💬 AI Chat",value=f"`{PREFIX}ai <text>`\n`@{bot.user.name} <text>`",inline=False)
+ embed.add_field(name="🤖 Models",value=f"`{PREFIX}cm` - Current model\n`{PREFIX}models` - List all\n*Set via Web Panel*",inline=True)
  if is_owner(ctx.author.id):
-  embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select",inline=True)
-  embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - Panel\n`{PREFIX}sm` - Manage",inline=True)
+  embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select model",inline=True)
+  embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - View panel\n`{PREFIX}sm` - Manage",inline=True)
   embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl` `{PREFIX}au`",inline=True)
  embed.add_field(name="🔧 Utility",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping` `{PREFIX}stats`",inline=True)
- embed.add_field(name="🌐 Panel",value=f"`{CONFIG_PANEL_URL[:30] if CONFIG_PANEL_URL else 'Not set'}...`",inline=True)
+ embed.add_field(name="🌐 Panel",value=f"`{CONFIG_PANEL_URL[:30]+'...'if len(CONFIG_PANEL_URL)>30 else CONFIG_PANEL_URL or'Not set'}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
@@ -881,10 +927,10 @@ async def cmd_panel(ctx):
  try:await ctx.message.delete()
  except:pass
  if CONFIG_PANEL_URL:
-  embed=discord.Embed(title="🌐 Config Panel",description=f"`{CONFIG_PANEL_URL}`",color=0x5865F2)
+  embed=discord.Embed(title="🌐 Config Panel",description=f"**URL:** `{CONFIG_PANEL_URL}`",color=0x5865F2)
   embed.set_footer(text=WATERMARK)
   await ctx.send(embed=embed)
- else:await ctx.send("❌ Panel not configured",delete_after=5)
+ else:await ctx.send("❌ Config panel not configured",delete_after=5)
 def run_flask():
  from flask import Flask,jsonify
  app=Flask(__name__)
@@ -892,7 +938,7 @@ def run_flask():
  def home():return f"Bot {bot.user} running! | {WATERMARK}"if bot.user else"Starting..."
  @app.route('/health')
  def health():return jsonify({"status":"ok","bot_ready":bot.user is not None})
- port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
+  port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
 if __name__=="__main__":
  keep_alive();PORT=int(os.getenv("PORT",8080))
  if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=os.getenv("ADMIN_KEY","admin123"));print(f"🚀 Web Panel: http://0.0.0.0:{PORT}")
