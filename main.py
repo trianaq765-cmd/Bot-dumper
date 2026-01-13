@@ -177,7 +177,10 @@ class RateLimiter:
     if not self.cd[uid]:del self.cd[uid]
 rl=RateLimiter()
 @dataclass
-class ChatMsg:role:str;content:str;ts:float
+class ChatMsg:
+ role:str
+ content:str
+ ts:float
 class Memory:
  def __init__(self):self.conv=defaultdict(list);self.lock=threading.Lock()
  def add(self,uid,role,content):
@@ -374,7 +377,9 @@ FALLBACK=[("groq",call_groq),("cerebras",call_cerebras),("sambanova",call_samban
 def ask_ai(prompt,uid=None,model=None):
  sel=model if model else(db.get_model(uid)if is_owner(uid)else get_public_default())
  msgs=[{"role":"system","content":SYS_PROMPT}]
- if uid:h=mem.get(uid);msgs.extend(h[-10:])if h else None
+ if uid:
+  h=mem.get(uid)
+  if h:msgs.extend(h[-10:])
  msgs.append({"role":"user","content":prompt})
  result,prov=call_ai(sel,msgs,prompt)
  if not result:
@@ -553,7 +558,10 @@ class ShieldManageView(ui.View):
 def split_msg(txt,lim=1950):
  if not txt:return[""]
  chunks=[]
- while len(txt)>lim:sp=txt.rfind('\n',0,lim);sp=lim if sp==-1 else sp;chunks.append(txt[:sp]);txt=txt[sp:].lstrip()
+ while len(txt)>lim:
+  sp=txt.rfind('\n',0,lim)
+  if sp==-1:sp=lim
+  chunks.append(txt[:sp]);txt=txt[sp:].lstrip()
  if txt:chunks.append(txt)
  return chunks
 async def send_resp(ch,content):
@@ -575,7 +583,10 @@ async def on_message(msg):
    if db.banned(msg.author.id):return
    ok,rem=rl.check(msg.author.id,"ai",5)
    if not ok:return await msg.channel.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
-   async with msg.channel.typing():resp,_=ask_ai(content,msg.author.id);await send_resp(msg.channel,resp);db.stat("ai",msg.author.id)
+   async with msg.channel.typing():
+    resp,_=ask_ai(content,msg.author.id)
+    await send_resp(msg.channel,resp)
+    db.stat("ai",msg.author.id)
    try:await msg.delete()
    except:pass
   return
@@ -586,7 +597,10 @@ async def cmd_ai(ctx,*,prompt:str=None):
  if not prompt:return await ctx.send(f"Usage: `{PREFIX}ai <question>`",delete_after=10)
  ok,rem=rl.check(ctx.author.id,"ai",5)
  if not ok:return await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
- async with ctx.typing():resp,_=ask_ai(prompt,ctx.author.id);await send_resp(ctx.channel,resp);db.stat("ai",ctx.author.id)
+ async with ctx.typing():
+  resp,_=ask_ai(prompt,ctx.author.id)
+  await send_resp(ctx.channel,resp)
+  db.stat("ai",ctx.author.id)
  try:await ctx.message.delete()
  except:pass
 @bot.command(name="model",aliases=["m"])
@@ -618,7 +632,14 @@ async def cmd_img(ctx,*,prompt:str=None):
  st=await ctx.send(f"🎨 Generating with {info[0]} **{info[1]}**...")
  try:
   data,err=await gen_image(prompt,model)
-  if data:f=discord.File(io.BytesIO(data),"image.png");embed=discord.Embed(title=f"🎨 {prompt[:80]}",color=0x5865F2);embed.set_image(url="attachment://image.png");embed.set_footer(text=f"{info[0]} {info[1]}");await ctx.send(embed=embed,file=f);await st.delete();db.stat("img",ctx.author.id)
+  if data:
+   f=discord.File(io.BytesIO(data),"image.png")
+   embed=discord.Embed(title=f"🎨 {prompt[:80]}",color=0x5865F2)
+   embed.set_image(url="attachment://image.png")
+   embed.set_footer(text=f"{info[0]} {info[1]}")
+   await ctx.send(embed=embed,file=f)
+   await st.delete()
+   db.stat("img",ctx.author.id)
   else:await st.edit(content=f"❌ Failed: {err}")
  except Exception as e:await st.edit(content=f"❌ Error: {str(e)[:50]}")
  try:await ctx.message.delete()
@@ -642,31 +663,38 @@ async def cmd_dump(ctx,url:str=None,*,flags:str=""):
  st=await ctx.send("🔄 Dumping...")
  result=dumper.dump(url,"--nocache"not in flags)
  if result["success"]:
-  content=result["content"];ext="lua"if"local "in content[:500]else"html"if"<html"in content[:200].lower()else"txt"
+  content=result["content"]
+  ext="lua"if"local "in content[:500]else"html"if"<html"in content[:200].lower()else"txt"
   f=discord.File(io.BytesIO(content.encode()),f"dump.{ext}")
-  await ctx.send(f"✅ Method: `{result['method']}` | Size: `{len(content):,}` bytes",file=f);await st.delete();db.stat("dump",ctx.author.id)
+  await ctx.send(f"✅ Method: `{result['method']}` | Size: `{len(content):,}` bytes",file=f)
+  await st.delete()
+  db.stat("dump",ctx.author.id)
  else:await st.edit(content=f"❌ {result.get('error','Failed')}")
 @bot.command(name="shield",aliases=["sh"])
 async def cmd_shield(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- st=shield.health();embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
- embed.add_field(name="Status","🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
- embed.add_field(name="URL",f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
+ st=shield.health()
+ embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
+ embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
+ embed.add_field(name="URL",value=f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
  await ctx.send(embed=embed,view=ShieldView())
 @bot.command(name="shieldm",aliases=["sm"])
 async def cmd_sm(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
- embed.add_field(name="Format","`type:value`\nEx: `hwid:ABC123`",inline=True)
- embed.add_field(name="Types","`userId`,`hwid`,`ip`",inline=True)
+ embed.add_field(name="Format",value="`type:value`\nEx: `hwid:ABC123`",inline=True)
+ embed.add_field(name="Types",value="`userId`,`hwid`,`ip`",inline=True)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="clear",aliases=["reset"])
-async def cmd_clear(ctx):mem.clear(ctx.author.id);await ctx.send("🧹 Memory cleared!",delete_after=5);
+async def cmd_clear(ctx):
+ mem.clear(ctx.author.id)
+ await ctx.send("🧹 Memory cleared!",delete_after=5)
  try:await ctx.message.delete()
  except:pass
 @bot.command(name="ping",aliases=["p"])
 async def cmd_ping(ctx):
- curr=db.get_model(ctx.author.id)if is_owner(ctx.author.id)else get_public_default();m=MODELS.get(curr,{})
+ curr=db.get_model(ctx.author.id)if is_owner(ctx.author.id)else get_public_default()
+ m=MODELS.get(curr,{})
  embed=discord.Embed(title="🏓 Pong!",color=0x2ECC71)
  embed.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`",inline=True)
  embed.add_field(name="Model",value=f"{m.get('e','')} {m.get('n','')}",inline=True)
@@ -684,13 +712,16 @@ async def cmd_status(ctx):
 @bot.command(name="testai")
 async def cmd_testai(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- st=await ctx.send("🔄 Testing...");test=[{"role":"user","content":"Say OK"}];results=[]
+ st=await ctx.send("🔄 Testing...")
+ test=[{"role":"user","content":"Say OK"}]
+ results=[]
  providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("CF",lambda:call_cloudflare(test),get_api_key("cloudflare_token")),("Cohere",lambda:call_cohere(test),get_api_key("cohere")),("Mistral",lambda:call_mistral(test),get_api_key("mistral")),("Together",lambda:call_together(test),get_api_key("together")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("Tavily",lambda:call_tavily(test),get_api_key("tavily")),("Poll",lambda:call_pollinations(test,"poll_free"),True)]
  for n,f,k in providers:
   if not k:results.append(f"⚪{n}");continue
   try:r=f();results.append(f"✅{n}"if r else f"❌{n}")
   except:results.append(f"❌{n}")
- embed=discord.Embed(title="🧪 AI Test",description=" | ".join(results),color=0x5865F2);await st.edit(content=None,embed=embed)
+ embed=discord.Embed(title="🧪 AI Test",description=" | ".join(results),color=0x5865F2)
+ await st.edit(content=None,embed=embed)
 @bot.command(name="blacklist",aliases=["bl","ban"])
 async def cmd_bl(ctx,action:str=None,user:discord.User=None):
  if not is_owner(ctx.author.id):return
@@ -701,14 +732,20 @@ async def cmd_bl(ctx,action:str=None,user:discord.User=None):
 async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
  if not user:return await ctx.send(f"Usage: `{PREFIX}au @user model1,model2` or `reset`",delete_after=10)
- if not models:curr=db.get_allowed(user.id);return await ctx.send(f"📋 {user.mention}: `{','.join(curr)or'None'}`",delete_after=10)
- if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user.mention}",delete_after=5)
+ if not models:
+  curr=db.get_allowed(user.id)
+  return await ctx.send(f"📋 {user.mention}: `{','.join(curr)or'None'}`",delete_after=10)
+ if models.lower()=="reset":
+  db.rem_allowed(user.id)
+  return await ctx.send(f"✅ Reset {user.mention}",delete_after=5)
  valid=[m.strip()for m in models.split(",")if m.strip()in ALL_MODELS]
  if not valid:return await ctx.send("❌ Invalid models",delete_after=5)
- db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}: `{','.join(valid)}`",delete_after=5)
+ db.set_allowed(user.id,valid)
+ await ctx.send(f"✅ {user.mention}: `{','.join(valid)}`",delete_after=5)
 @bot.command(name="stats")
 async def cmd_stats(ctx):
- s=db.get_stats();embed=discord.Embed(title="📈 Bot Statistics",color=0x5865F2)
+ s=db.get_stats()
+ embed=discord.Embed(title="📈 Bot Statistics",color=0x5865F2)
  embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
  embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
  embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
@@ -725,11 +762,26 @@ async def cmd_help(ctx):
   embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}bl` `{PREFIX}au` `{PREFIX}stats`",inline=True)
  embed.add_field(name="🔧 Utility",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping`",inline=True)
  await ctx.send(embed=embed)
+def run_web_server():
+ from flask import Flask
+ app=Flask(__name__)
+ @app.route('/')
+ def home():return"Bot is running!"
+ @app.route('/health')
+ def health():return{"status":"ok","bot":str(bot.user)if bot.user else"starting"}
+ port=int(os.getenv("PORT",8080))
+ app.run(host="0.0.0.0",port=port)
 if __name__=="__main__":
- keep_alive()
- if start_web_panel:
-  WEB_PORT=int(os.getenv("WEB_PORT","5000"));WEB_KEY=os.getenv("WEB_ADMIN_KEY","admin123")
-  start_web_panel(port=WEB_PORT,admin_key=WEB_KEY)
- print("="*50);print("🚀 Bot Starting...");print(f"👑 Owners: {OWNER_IDS}");print(f"🌍 Default: {get_public_default()}");print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print("-"*50)
- for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("Cloudflare","cloudflare_token"),("OpenRouter","openrouter"),("Cohere","cohere"),("Mistral","mistral"),("Together","together"),("Tavily","tavily")]:print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
- print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
+ web_thread=threading.Thread(target=run_web_server,daemon=True)
+ web_thread.start()
+ print("="*50)
+ print("🚀 Bot Starting...")
+ print(f"👑 Owners: {OWNER_IDS}")
+ print(f"🌍 Default: {get_public_default()}")
+ print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}")
+ print(f"🌐 Web Port: {os.getenv('PORT',8080)}")
+ print("-"*50)
+ for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("Cloudflare","cloudflare_token"),("OpenRouter","openrouter"),("Cohere","cohere"),("Mistral","mistral"),("Together","together"),("Tavily","tavily")]:
+  print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
+ print("="*50)
+ bot.run(DISCORD_TOKEN,log_handler=None)
