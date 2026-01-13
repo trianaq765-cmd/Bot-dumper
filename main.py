@@ -501,43 +501,54 @@ class ShieldInfoSelect(ui.Select):
   except Exception as e:embed.description=f"Error: {str(e)[:100]}"
   embed.set_footer(text=WATERMARK)
   await i.followup.send(embed=embed,ephemeral=True)
-class ShieldActionSelect(ui.Select):
- def __init__(self):
-  opts=[discord.SelectOption(label="Clear Sessions",value="clear_s",emoji="🧹"),discord.SelectOption(label="Clear Logs",value="clear_l",emoji="🗑️"),discord.SelectOption(label="Clear Cache",value="clear_c",emoji="💾")]
-  super().__init__(placeholder="Quick Actions...",options=opts)
- async def callback(self,i:discord.Interaction):
-  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
-  await i.response.defer(ephemeral=True);a=self.values[0]
-  if a=="clear_s":r=shield.clear_sessions();msg="Sessions cleared"
-  elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
-  elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
-  else:r={"success":False};msg="Unknown"
-  await i.followup.send(f"✅ {msg}"if r.get("success")is not False else"❌ Failed",ephemeral=True)
-class ShieldView(ui.View):
- def __init__(self):super().__init__(timeout=120);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
  def __init__(self):
-  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫"),discord.SelectOption(label="Unban",value="unban",emoji="🔓"),discord.SelectOption(label="Whitelist",value="wl",emoji="✅"),discord.SelectOption(label="Remove WL",value="rem_wl",emoji="➖"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️"),discord.SelectOption(label="Kill",value="kill",emoji="💀")]
-  super().__init__(placeholder="Management...",options=opts)
+  opts=[
+   discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="Ban by ID/HWID/IP"),
+   discord.SelectOption(label="Unban ID",value="unban",emoji="🔓",description="Unban by Ban ID (Number)"),
+   discord.SelectOption(label="Whitelist",value="wl",emoji="✅",description="Add to whitelist"),
+   discord.SelectOption(label="Remove WL",value="rem_wl",emoji="➖",description="Remove from whitelist"),
+   discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="Suspend user"),
+   discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="Unsuspend user"),
+   discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Kill session by ID")
+  ]
+  super().__init__(placeholder="⚙️ Select Action...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   a=self.values[0]
-  class SM(ui.Modal,title="Manage"):
-   val=ui.TextInput(label="Value (userId/hwid/ip)",required=True)
+  if a=="unban":t="Unban User";l="Ban ID (Number)";p="Example: 5"
+  elif a=="kill":t="Kill Session";l="Session ID";p="Enter Session ID"
+  elif a in ["wl","rem_wl","sus","unsus"]:t="Manage User";l="Type:Value";p="userId:123 or hwid:ABC"
+  else:t="Ban User";l="Value";p="userId:123 or hwid:ABC"
+  class SM(ui.Modal,title=t):
+   val=ui.TextInput(label=l,placeholder=p,required=True)
    reason=ui.TextInput(label="Reason",required=False,default="Via Discord")
-   def __init__(s,ac):super().__init__();s.ac=ac
+   def __init__(s,ac):
+    super().__init__();s.ac=ac
+    if ac in ["unban","unsus","rem_wl","kill"]:s.remove_item(s.reason)
    async def on_submit(s,mi):
-    v=s.val.value;r=s.reason.value;res={"success":False}
+    await mi.response.defer(ephemeral=True);v=s.val.value.strip()
+    r=s.reason.value.strip() if hasattr(s,"reason") else "Via Discord"
+    res={"success":False,"error":"Unknown"}
     try:
-     if s.ac=="ban":res=shield.add_ban("userId",v,r)
+     if s.ac=="ban":
+      if ":" in v:t,val=v.split(":",1)
+      else:t,val="userId",v
+      res=shield.add_ban(t.strip(),val.strip(),r)
      elif s.ac=="unban":res=shield.rem_ban(v)
-     elif s.ac=="wl":res=shield.add_wl("userId",v)
-     elif s.ac=="rem_wl":res=shield.rem_wl("userId",v)
-     elif s.ac=="sus":res=shield.suspend("userId",v,r)
-     elif s.ac=="unsus":res=shield.unsuspend("userId",v)
+     elif s.ac in ["wl","rem_wl","sus","unsus"]:
+      if ":" in v:t,val=v.split(":",1)
+      else:t,val="userId",v
+      t,val=t.strip(),val.strip()
+      if s.ac=="wl":res=shield.add_wl(t,val)
+      elif s.ac=="rem_wl":res=shield.rem_wl(t,val)
+      elif s.ac=="sus":res=shield.suspend(t,val,r)
+      elif s.ac=="unsus":res=shield.unsuspend(t,val)
      elif s.ac=="kill":res=shield.kill(v,r)
-     await mi.response.send_message(f"✅ Done"if res.get("success")is not False else"❌ Failed",ephemeral=True)
-    except:await mi.response.send_message("❌ Error",ephemeral=True)
+     if res.get("success")is not False and not res.get("error"):
+      await mi.followup.send(f"✅ **Success!**\nAction: `{s.ac}`\nValue: `{v}`\n-# *{WATERMARK}*",ephemeral=True)
+     else:await mi.followup.send(f"❌ **Failed**\nError: {res.get('error','Unknown')}\n-# *{WATERMARK}*",ephemeral=True)
+    except Exception as e:await mi.followup.send(f"❌ **Error:** {str(e)[:100]}",ephemeral=True)
   await i.response.send_modal(SM(a))
 class ShieldManageView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(ShieldManageSelect())
