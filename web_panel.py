@@ -8,10 +8,13 @@ from typing import Optional
 ADMIN_USER=os.getenv("ADMIN_USER","admin")
 ADMIN_PASS=os.getenv("ADMIN_PASS","admin123")
 BOT_SECRET=os.getenv("CONFIG_BOT_SECRET","bot_secret_key_123")
-DB_PATH=os.getenv("DB_PATH","bot_config.db")
+DB_PATH="/tmp/bot_config.db"
 db_lock=threading.Lock()
 logger=logging.getLogger("uvicorn")
-def get_db():conn=sqlite3.connect(DB_PATH,check_same_thread=False);conn.row_factory=sqlite3.Row;return conn
+def get_db():
+ conn=sqlite3.connect(DB_PATH,check_same_thread=False)
+ conn.row_factory=sqlite3.Row
+ return conn
 def init_db():
  with db_lock:
   conn=get_db()
