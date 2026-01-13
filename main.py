@@ -87,7 +87,7 @@ def get_model_info(model_id):
 def is_owner(uid):return uid in OWNER_IDS
 class ShieldAPI:
  def __init__(self,url,key):self.url=url;self.key=key;self.timeout=30
- def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json"}
+ def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json","Accept":"application/json"}
  def _req(self,method,ep,data=None):
   if not self.url:return{"success":False,"error":"Shield not configured"}
   try:
@@ -340,7 +340,9 @@ def call_pollinations_free(msgs,model_key):
   prompt=msgs[-1]["content"]if msgs else""
   if mid=="auto":r=get_requests().get(f"https://text.pollinations.ai/{quote(prompt[:3000])}",timeout=60)
   else:r=get_requests().post("https://text.pollinations.ai/",headers={"Content-Type":"application/json"},json={"messages":msgs,"model":mid,"temperature":0.7},timeout=60)
-  return r.text.strip()if r.status_code==200 and r.text.strip()else None
+  if r.status_code!=200:return None
+  try:return r.json().get("content",r.text)
+  except:return r.text.strip()
  except Exception as e:logger.error(f"PollFree:{e}");return None
 def call_pollinations_api(msgs,model_key):
  k=get_api_key("pollinations")
@@ -348,7 +350,9 @@ def call_pollinations_api(msgs,model_key):
  try:
   mid=get_models().get(model_key,{}).get("m","openai")
   r=get_requests().post("https://text.pollinations.ai/",headers={"Content-Type":"application/json","Authorization":f"Bearer {k}"},json={"messages":msgs,"model":mid,"temperature":0.7},timeout=60)
-  return r.text.strip()if r.status_code==200 and r.text.strip()else None
+  if r.status_code!=200:return None
+  try:return r.json().get("content",r.text)
+  except:return r.text.strip()
  except Exception as e:logger.error(f"PollAPI:{e}");return None
 def call_ai(model,msgs):
  models=get_models();m=models.get(model,{});p=m.get("p","groq")
@@ -403,6 +407,7 @@ def split_msg(txt,lim=1900):
  if txt:chunks.append(txt)
  return chunks
 async def send_ai_response(ch,content,model_id,ref_msg=None):
+ content=re.sub(r'<think>.*?</think>','',content,flags=re.DOTALL).strip()
  info=get_model_info(model_id)
  chunks=split_msg(content)
  footer=f"\n\n-# {info['e']} *{WATERMARK}*"
@@ -440,7 +445,7 @@ class ShieldInfoSelect(ui.Select):
      if ll:
       txt=[]
       for l in ll[:8]:txt.append(f"`{l.get('time','?')[:16]}` {l.get('service','?')}")
-      embed.description="\n".join(txt)
+      embed.description="\n".join(txt)[:4096]
      else:embed.description="None"
    elif a=="bans":
     d=shield.bans();embed.title="🚫 Bans"
@@ -499,9 +504,7 @@ class ShieldManageSelect(ui.Select):
     super().__init__();s.ac=ac
     if ac in ["unban","unsus","rem_wl","kill"]:s.remove_item(s.reason)
    async def on_submit(s,mi):
-    await mi.response.defer(ephemeral=True);v=s.val.value.strip()
-    r=s.reason.value.strip() if hasattr(s,"reason") else "Via Discord"
-    res={"success":False,"error":"Unknown"}
+    await mi.response.defer(ephemeral=True);v=s.val.value.strip();r=s.reason.value.strip()if hasattr(s,"reason")else"Via Discord";res={"success":False,"error":"Unknown"}
     try:
      if s.ac=="ban":
       if ":" in v:t,val=v.split(":",1)
@@ -517,8 +520,7 @@ class ShieldManageSelect(ui.Select):
       elif s.ac=="sus":res=shield.suspend(t,val,r)
       elif s.ac=="unsus":res=shield.unsuspend(t,val)
      elif s.ac=="kill":res=shield.kill(v,r)
-     if res.get("success")is not False and not res.get("error"):
-      await mi.followup.send(f"✅ **Success!**\nAction: `{s.ac}`\nValue: `{v}`\n-# *{WATERMARK}*",ephemeral=True)
+     if res.get("success")is not False and not res.get("error"):await mi.followup.send(f"✅ **Success!**\nAction: `{s.ac}`\nValue: `{v}`\n-# *{WATERMARK}*",ephemeral=True)
      else:await mi.followup.send(f"❌ **Failed**\nError: {res.get('error','Unknown')}\n-# *{WATERMARK}*",ephemeral=True)
     except Exception as e:await mi.followup.send(f"❌ **Error:** {str(e)[:100]}",ephemeral=True)
   await i.response.send_modal(SM(a))
