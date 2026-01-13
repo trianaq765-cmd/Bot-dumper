@@ -932,17 +932,14 @@ async def cmd_panel(ctx):
   await ctx.send(embed=embed)
  else:await ctx.send("❌ Config panel not configured",delete_after=5)
 def run_flask():
- from flask import Flask,jsonify
- app=Flask(__name__)
+ from flask import Flask,jsonify;app=Flask(__name__)
  @app.route('/')
  def home():return f"Bot {bot.user} running! | {WATERMARK}"if bot.user else"Starting..."
  @app.route('/health')
  def health():return jsonify({"status":"ok","bot_ready":bot.user is not None})
-  port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
+ app.run(host="0.0.0.0",port=int(os.getenv("PORT",8080)),debug=False,use_reloader=False)
 if __name__=="__main__":
  keep_alive();PORT=int(os.getenv("PORT",8080))
  if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=os.getenv("ADMIN_KEY","admin123"));print(f"🚀 Web Panel: http://0.0.0.0:{PORT}")
  else:threading.Thread(target=run_flask,daemon=True).start();print(f"🚀 Health: http://0.0.0.0:{PORT}")
- print("="*50);print(f"🚀 Bot Starting... | {WATERMARK}")
- print(f"👑 Owners: {OWNER_IDS}");print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}")
- print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
+ print("="*50);print(f"🚀 Bot Starting... | {WATERMARK}");print(f"👑 Owners: {OWNER_IDS}");print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}");print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
