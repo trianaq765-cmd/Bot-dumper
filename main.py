@@ -89,7 +89,37 @@ def get_groq():
    try:from groq import Groq;_groq=Groq(api_key=k)
    except:pass
  return _groq
-DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Search+Web","c":"main","p":"tavily","m":"search"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"or_qwen":{"e":"💻","n":"OR-Qwen","d":"Qwen 2.5 72B","c":"openrouter","p":"openrouter","m":"qwen/qwen-2.5-72b-instruct:free"},"or_deepseek":{"e":"🌊","n":"OR-DeepSeek","d":"DeepSeek Chat","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-chat:free"},"or_mistral":{"e":"🅼","n":"OR-Mistral","d":"Mistral Nemo","c":"openrouter","p":"openrouter","m":"mistralai/mistral-nemo:free"},"p_openai":{"e":"🤖","n":"Poll-OpenAI","d":"OpenAI Large","c":"pollinations","p":"pollinations","m":"openai-large"},"p_claude":{"e":"🎭","n":"Poll-Claude","d":"Claude Hybrid","c":"pollinations","p":"pollinations","m":"claude-hybridspace"},"p_gemini":{"e":"💎","n":"Poll-Gemini","d":"Gemini","c":"pollinations","p":"pollinations","m":"gemini"},"p_deepseek":{"e":"🐳","n":"Poll-DeepSeek","d":"DeepSeek V3","c":"pollinations","p":"pollinations","m":"deepseek"},"p_qwen":{"e":"📟","n":"Poll-Qwen","d":"Qwen 72B","c":"pollinations","p":"pollinations","m":"qwen-72b"},"p_llama":{"e":"🦙","n":"Poll-Llama","d":"Llama 3.3","c":"pollinations","p":"pollinations","m":"llama-3.3-70b"},"p_mistral":{"e":"🅼","n":"Poll-Mistral","d":"Mistral","c":"pollinations","p":"pollinations","m":"mistral"},"poll_free":{"e":"🌸","n":"Poll-Free","d":"Free Unlimited","c":"pollinations","p":"pollinations","m":"free"}}
+DEFAULT_MODELS={
+"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B - Ultra Fast","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},
+"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B - Fast Inference","c":"main","p":"cerebras","m":"llama-3.3-70b"},
+"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B - Enterprise","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},
+"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B - Edge AI","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},
+"cohere":{"e":"🔷","n":"Cohere","d":"Command R+ - Advanced RAG","c":"main","p":"cohere","m":"command-r-plus-08-2024"},
+"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small - Efficient","c":"main","p":"mistral","m":"mistral-small-latest"},
+"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo - Fast","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},
+"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K - Long Context","c":"main","p":"moonshot","m":"moonshot-v1-8k"},
+"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B - Open Source","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},
+"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B - Largest","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},
+"tavily":{"e":"🔍","n":"Tavily","d":"Web Search AI","c":"main","p":"tavily","m":"search"},
+"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B via OpenRouter","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},
+"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0 Flash via OpenRouter","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},
+"or_qwen":{"e":"💻","n":"OR-Qwen","d":"Qwen 2.5 72B via OpenRouter","c":"openrouter","p":"openrouter","m":"qwen/qwen-2.5-72b-instruct:free"},
+"or_deepseek":{"e":"🌊","n":"OR-DeepSeek","d":"DeepSeek Chat via OpenRouter","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-chat:free"},
+"or_mistral":{"e":"🅼","n":"OR-Mistral","d":"Mistral Nemo via OpenRouter","c":"openrouter","p":"openrouter","m":"mistralai/mistral-nemo:free"},
+"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"OpenAI via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"openai"},
+"pf_claude":{"e":"🆓","n":"PollFree-Claude","d":"Claude via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"claude"},
+"pf_gemini":{"e":"🆓","n":"PollFree-Gemini","d":"Gemini via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"gemini"},
+"pf_deepseek":{"e":"🆓","n":"PollFree-DeepSeek","d":"DeepSeek via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"deepseek"},
+"pf_qwen":{"e":"🆓","n":"PollFree-Qwen","d":"Qwen 72B via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"qwen-72b"},
+"pf_llama":{"e":"🆓","n":"PollFree-Llama","d":"Llama 3.3 via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"llama"},
+"pf_mistral":{"e":"🆓","n":"PollFree-Mistral","d":"Mistral via Pollinations (Free)","c":"pollinations_free","p":"pollinations_free","m":"mistral"},
+"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Select (Free No API)","c":"pollinations_free","p":"pollinations_free","m":"auto"},
+"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI via Pollinations API","c":"pollinations_api","p":"pollinations_api","m":"openai"},
+"pa_claude":{"e":"🔑","n":"PollAPI-Claude","d":"Claude via Pollinations API","c":"pollinations_api","p":"pollinations_api","m":"claude"},
+"pa_gemini":{"e":"🔑","n":"PollAPI-Gemini","d":"Gemini via Pollinations API","c":"pollinations_api","p":"pollinations_api","m":"gemini"},
+"pa_mistral":{"e":"🔑","n":"PollAPI-Mistral","d":"Mistral via Pollinations API","c":"pollinations_api","p":"pollinations_api","m":"mistral"},
+"pa_deepseek":{"e":"🔑","n":"PollAPI-DeepSeek","d":"DeepSeek via Pollinations API","c":"pollinations_api","p":"pollinations_api","m":"deepseek"},
+}
 IMG_MODELS={"flux":("🎨","Flux","Standard"),"flux_pro":("⚡","Flux Pro","Professional"),"turbo":("🚀","Turbo","Fast"),"dalle":("🤖","DALL-E 3","OpenAI"),"sdxl":("🖼️","SDXL","Stable Diffusion")}
 def get_models():
  config=fetch_panel_config()
@@ -106,7 +136,8 @@ def get_all_model_ids():return list(get_models().keys())
 def is_owner(uid):return uid in OWNER_IDS
 def get_model_info(model_id):
  models=get_models()
- return models.get(model_id,{"e":"🤖","n":"Unknown","d":"","c":"main","p":"groq","m":model_id})
+ if model_id in models:return models[model_id]
+ return{"e":"❓","n":"Unknown","d":"Model not found","c":"unknown","p":"unknown","m":model_id}
 class ShieldAPI:
  def __init__(self,url,key):self.url=url;self.key=key;self.timeout=30
  def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json","Accept":"application/json"}
@@ -153,8 +184,7 @@ class ShieldAPI:
 shield=ShieldAPI(SHIELD_URL,SHIELD_ADMIN_KEY)
 class Database:
  def __init__(self,path="bot.db"):
-  self.conn=sqlite3.connect(path,check_same_thread=False)
-  self.lock=threading.Lock()
+  self.conn=sqlite3.connect(path,check_same_thread=False);self.lock=threading.Lock()
   self.conn.executescript('''CREATE TABLE IF NOT EXISTS user_prefs(uid INTEGER PRIMARY KEY,model TEXT DEFAULT "groq",img_model TEXT DEFAULT "flux");
 CREATE TABLE IF NOT EXISTS bot_settings(key TEXT PRIMARY KEY,value TEXT);
 CREATE TABLE IF NOT EXISTS stats(id INTEGER PRIMARY KEY,cmd TEXT,uid INTEGER,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
@@ -214,18 +244,10 @@ class RateLimiter:
    now=time.time();last=self.cd[uid][cmd]
    if now-last<cd:return False,cd-(now-last)
    self.cd[uid][cmd]=now;return True,0
- def cleanup(self):
-  with self.lock:
-   now=time.time()
-   for uid in list(self.cd.keys()):
-    self.cd[uid]={k:v for k,v in self.cd[uid].items()if now-v<300}
-    if not self.cd[uid]:del self.cd[uid]
 rl=RateLimiter()
 @dataclass
 class ChatMsg:
- role:str
- content:str
- ts:float
+ role:str;content:str;ts:float
 class Memory:
  def __init__(self):self.conv=defaultdict(list);self.lock=threading.Lock()
  def add(self,uid,role,content):
@@ -238,9 +260,8 @@ class Memory:
   if pt:
    try:timeout_mins=int(pt)
    except:pass
-  timeout_secs=timeout_mins*60
   with self.lock:
-   now=time.time();self.conv[uid]=[m for m in self.conv[uid]if now-m.ts<timeout_secs]
+   now=time.time();self.conv[uid]=[m for m in self.conv[uid]if now-m.ts<timeout_mins*60]
    self.conv[uid].append(ChatMsg(role,content[:2500],now))
    if len(self.conv[uid])>max_msgs:self.conv[uid]=self.conv[uid][-max_msgs:]
  def get(self,uid):
@@ -249,8 +270,7 @@ class Memory:
   if pt:
    try:timeout_mins=int(pt)
    except:pass
-  timeout_secs=timeout_mins*60
-  with self.lock:now=time.time();self.conv[uid]=[m for m in self.conv[uid]if now-m.ts<timeout_secs];return[{"role":m.role,"content":m.content}for m in self.conv[uid]]
+  with self.lock:now=time.time();self.conv[uid]=[m for m in self.conv[uid]if now-m.ts<timeout_mins*60];return[{"role":m.role,"content":m.content}for m in self.conv[uid]]
  def clear(self,uid):
   with self.lock:self.conv[uid]=[]
 mem=Memory()
@@ -260,8 +280,7 @@ class Dumper:
   if cache:
    c=db.get_cache(url)
    if c:return{"success":True,"content":c,"method":"cache"}
-  req=get_requests();curl=get_curl();cs=get_cloudscraper()
-  methods=[]
+  req=get_requests();curl=get_curl();cs=get_cloudscraper();methods=[]
   if curl:methods.append(("curl",lambda u:curl.get(u,impersonate="chrome120",headers={"User-Agent":"Roblox/WinInet"},timeout=25)))
   if cs:methods.append(("cloudscraper",lambda u:cs.get(u,timeout=25)))
   if req:methods.append(("requests",lambda u:req.get(u,headers={"User-Agent":"Roblox/WinInet"},timeout=25)))
@@ -276,12 +295,7 @@ dumper=Dumper()
 def get_system_prompt():
  panel_prompt=get_panel_setting("system_prompt")
  if panel_prompt:return panel_prompt
- return'''You are an elite AI assistant representing the pinnacle of artificial intelligence - a synthesis of capabilities from Claude Opus 4.5, GPT-5.2, and Gemini 3 Pro Ultra.
-REASONING ENGINE: Chain-of-Thought Processing, Multi-Perspective Analysis, Bayesian Inference, Counterfactual Reasoning, Meta-Cognition.
-KNOWLEDGE SYNTHESIS: Cross-Domain Integration, Temporal Awareness, Source Triangulation, Abstraction Layering.
-RESPONSE METHODOLOGY: PARSE→PLAN→EXECUTE→VERIFY→ENHANCE.
-INTERACTION PRINCIPLES: Match complexity to user expertise. Be direct and substantive. Use formatting strategically. Balance confidence with intellectual humility. Prioritize accuracy over speed.
-LANGUAGE: Default Bahasa Indonesia, adapt to user preference seamlessly.'''
+ return'''You are an elite AI assistant. Be helpful, accurate, and concise. Default language: Bahasa Indonesia. Adapt to user preference.'''
 def get_public_default():
  panel_default=get_panel_setting("default_model")
  if panel_default:return panel_default
@@ -376,8 +390,7 @@ def call_replicate(msgs):
   if r.status_code in[200,201]:
    pred=r.json();url=f"https://api.replicate.com/v1/predictions/{pred.get('id')}"
    for _ in range(30):
-    time.sleep(2)
-    ch=get_requests().get(url,headers={"Authorization":f"Bearer {k}"},timeout=10)
+    time.sleep(2);ch=get_requests().get(url,headers={"Authorization":f"Bearer {k}"},timeout=10)
     if ch.status_code==200:
      d=ch.json()
      if d.get("status")=="succeeded":return"".join(d.get("output",[]))
@@ -401,37 +414,48 @@ def call_openrouter(msgs,model_key):
  k=get_api_key("openrouter")
  if not k:return None
  try:
-  models=get_models();mid=models.get(model_key,{}).get("m",models.get("or_llama",{}).get("m","meta-llama/llama-3.3-70b-instruct:free"))
+  models=get_models();mid=models.get(model_key,{}).get("m","meta-llama/llama-3.3-70b-instruct:free")
   r=get_requests().post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {k}","Content-Type":"application/json","HTTP-Referer":"https://github.com","X-Title":"DiscordBot"},json={"model":mid,"messages":msgs,"max_tokens":4096},timeout=60)
   if r.status_code==200:d=r.json();return d["choices"][0]["message"]["content"]if"choices"in d else None
  except Exception as e:logger.error(f"OR:{e}")
  return None
-def call_pollinations(msgs,model_key):
+def call_pollinations_free(msgs,model_key):
  try:
-  models=get_models();mid=models.get(model_key,{}).get("m","openai-large")
-  if mid=="free":
-   prompt=msgs[-1]["content"]if msgs else""
+  models=get_models();mid=models.get(model_key,{}).get("m","openai")
+  prompt=msgs[-1]["content"]if msgs else""
+  if mid=="auto":
    r=get_requests().get(f"https://text.pollinations.ai/{quote(prompt[:3000])}",timeout=60)
-  else:r=get_requests().post("https://text.pollinations.ai/",headers={"Content-Type":"application/json"},json={"messages":msgs,"model":mid,"temperature":0.7},timeout=60)
+  else:
+   r=get_requests().post("https://text.pollinations.ai/",headers={"Content-Type":"application/json"},json={"messages":msgs,"model":mid,"temperature":0.7},timeout=60)
   return r.text.strip()if r.status_code==200 and r.text.strip()else None
- except Exception as e:logger.error(f"Poll:{e}");return None
+ except Exception as e:logger.error(f"PollFree:{e}");return None
+def call_pollinations_api(msgs,model_key):
+ k=get_api_key("pollinations")
+ if not k:return None
+ try:
+  models=get_models();mid=models.get(model_key,{}).get("m","openai")
+  r=get_requests().post("https://text.pollinations.ai/",headers={"Content-Type":"application/json","Authorization":f"Bearer {k}"},json={"messages":msgs,"model":mid,"temperature":0.7},timeout=60)
+  return r.text.strip()if r.status_code==200 and r.text.strip()else None
+ except Exception as e:logger.error(f"PollAPI:{e}");return None
 def call_ai(model,msgs,prompt=""):
  models=get_models();m=models.get(model,{});p=m.get("p","groq")
- if p=="groq":return call_groq(msgs),model
- elif p=="cerebras":return call_cerebras(msgs),model
- elif p=="sambanova":return call_sambanova(msgs),model
- elif p=="cloudflare":return call_cloudflare(msgs),model
- elif p=="cohere":return call_cohere(msgs),model
- elif p=="mistral":return call_mistral(msgs),model
- elif p=="together":return call_together(msgs),model
- elif p=="moonshot":return call_moonshot(msgs),model
- elif p=="huggingface":return call_huggingface(msgs),model
- elif p=="replicate":return call_replicate(msgs),model
- elif p=="openrouter":return call_openrouter(msgs,model),model
- elif p=="pollinations":return call_pollinations(msgs,model),model
- elif p=="tavily":return call_tavily(msgs),model
- return None,"unknown"
-FALLBACK=[("groq",call_groq),("cerebras",call_cerebras),("sambanova",call_sambanova),("cloudflare",call_cloudflare),("poll_free",lambda m:call_pollinations(m,"poll_free"))]
+ result=None
+ if p=="groq":result=call_groq(msgs)
+ elif p=="cerebras":result=call_cerebras(msgs)
+ elif p=="sambanova":result=call_sambanova(msgs)
+ elif p=="cloudflare":result=call_cloudflare(msgs)
+ elif p=="cohere":result=call_cohere(msgs)
+ elif p=="mistral":result=call_mistral(msgs)
+ elif p=="together":result=call_together(msgs)
+ elif p=="moonshot":result=call_moonshot(msgs)
+ elif p=="huggingface":result=call_huggingface(msgs)
+ elif p=="replicate":result=call_replicate(msgs)
+ elif p=="openrouter":result=call_openrouter(msgs,model)
+ elif p=="pollinations_free":result=call_pollinations_free(msgs,model)
+ elif p=="pollinations_api":result=call_pollinations_api(msgs,model)
+ elif p=="tavily":result=call_tavily(msgs)
+ return result,model
+FALLBACK=[("groq",call_groq),("cerebras",call_cerebras),("sambanova",call_sambanova),("cloudflare",call_cloudflare),("poll_free",lambda m:call_pollinations_free(m,"poll_free"))]
 def ask_ai(prompt,uid=None,model=None):
  sel=model if model else(db.get_model(uid)if is_owner(uid)else get_public_default())
  msgs=[{"role":"system","content":get_system_prompt()}]
@@ -468,80 +492,64 @@ def split_msg(txt,lim=1900):
 async def send_ai_response(ch,content,model_id):
  info=get_model_info(model_id)
  chunks=split_msg(content)
- for i,c in enumerate(chunks):
-  if i==len(chunks)-1:
-   await ch.send(f"{c}\n\n-# {info['e']} *{info['n']}*")
-  else:
-   await ch.send(c)
+ footer=f"\n\n─────────────────────\n{info['e']} **{info['n']}** • `{info['m'][:30]}`"
+ if len(chunks)==1:
+  await ch.send(f"{chunks[0]}{footer}")
+ else:
+  for i,c in enumerate(chunks):
+   if i==len(chunks)-1:await ch.send(f"{c}{footer}")
+   else:await ch.send(c)
 class MainModelSelect(ui.Select):
  def __init__(self):
-  models=get_models()
-  opts=[]
+  models=get_models();opts=[]
   for mid,mdata in models.items():
-   if mdata.get("c")=="main":
-    opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
-  if not opts:opts=[discord.SelectOption(label="No models",value="none")]
-  super().__init__(placeholder="⚡ Main Models",options=opts[:25],row=0)
+   if mdata.get("c")=="main":opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
+  super().__init__(placeholder="⚡ Main Providers",options=opts[:25]if opts else[discord.SelectOption(label="None",value="none")],row=0)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   if self.values[0]=="none":return await i.response.send_message("❌ No models",ephemeral=True)
-  db.set_model(i.user.id,self.values[0])
-  info=get_model_info(self.values[0])
-  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}",ephemeral=True)
-class OpenRouterModelSelect(ui.Select):
+  db.set_model(i.user.id,self.values[0]);info=get_model_info(self.values[0])
+  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}\n> `{info['m']}`",ephemeral=True)
+class OpenRouterSelect(ui.Select):
  def __init__(self):
-  models=get_models()
-  opts=[]
+  models=get_models();opts=[]
   for mid,mdata in models.items():
-   if mdata.get("c")=="openrouter":
-    opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
-  if not opts:opts=[discord.SelectOption(label="No models",value="none")]
-  super().__init__(placeholder="🌐 OpenRouter Models",options=opts[:25],row=1)
+   if mdata.get("c")=="openrouter":opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
+  super().__init__(placeholder="🌐 OpenRouter (Free)",options=opts[:25]if opts else[discord.SelectOption(label="None",value="none")],row=1)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   if self.values[0]=="none":return await i.response.send_message("❌ No models",ephemeral=True)
-  db.set_model(i.user.id,self.values[0])
-  info=get_model_info(self.values[0])
-  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}",ephemeral=True)
-class PollinationsModelSelect(ui.Select):
+  db.set_model(i.user.id,self.values[0]);info=get_model_info(self.values[0])
+  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}\n> `{info['m']}`",ephemeral=True)
+class PollFreeSelect(ui.Select):
  def __init__(self):
-  models=get_models()
-  opts=[]
+  models=get_models();opts=[]
   for mid,mdata in models.items():
-   if mdata.get("c")=="pollinations":
-    opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
-  if not opts:opts=[discord.SelectOption(label="No models",value="none")]
-  super().__init__(placeholder="🌸 Pollinations Models",options=opts[:25],row=2)
+   if mdata.get("c")=="pollinations_free":opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
+  super().__init__(placeholder="🆓 Pollinations (Free No API)",options=opts[:25]if opts else[discord.SelectOption(label="None",value="none")],row=2)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   if self.values[0]=="none":return await i.response.send_message("❌ No models",ephemeral=True)
-  db.set_model(i.user.id,self.values[0])
-  info=get_model_info(self.values[0])
-  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}",ephemeral=True)
-class CustomModelSelect(ui.Select):
+  db.set_model(i.user.id,self.values[0]);info=get_model_info(self.values[0])
+  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}\n> `{info['m']}`",ephemeral=True)
+class PollAPISelect(ui.Select):
  def __init__(self):
-  models=get_models()
-  opts=[]
+  models=get_models();opts=[]
   for mid,mdata in models.items():
-   if mdata.get("c")=="custom":
-    opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
-  if not opts:opts=[discord.SelectOption(label="No custom models",value="none")]
-  super().__init__(placeholder="⚙️ Custom Models",options=opts[:25],row=3)
+   if mdata.get("c")=="pollinations_api":opts.append(discord.SelectOption(label=mdata["n"],value=mid,emoji=mdata["e"],description=mdata["d"][:50]))
+  super().__init__(placeholder="🔑 Pollinations (With API Key)",options=opts[:25]if opts else[discord.SelectOption(label="None",value="none")],row=3)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   if self.values[0]=="none":return await i.response.send_message("❌ No models",ephemeral=True)
-  db.set_model(i.user.id,self.values[0])
-  info=get_model_info(self.values[0])
-  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}",ephemeral=True)
+  db.set_model(i.user.id,self.values[0]);info=get_model_info(self.values[0])
+  await i.response.send_message(f"✅ Model set: {info['e']} **{info['n']}**\n> {info['d']}\n> `{info['m']}`",ephemeral=True)
 class ModelView(ui.View):
  def __init__(self):
-  super().__init__(timeout=120)
-  models=get_models()
-  cats=set(m.get("c","main")for m in models.values())
-  if "main" in cats:self.add_item(MainModelSelect())
-  if "openrouter" in cats:self.add_item(OpenRouterModelSelect())
-  if "pollinations" in cats:self.add_item(PollinationsModelSelect())
-  if "custom" in cats:self.add_item(CustomModelSelect())
+  super().__init__(timeout=180)
+  self.add_item(MainModelSelect())
+  self.add_item(OpenRouterSelect())
+  self.add_item(PollFreeSelect())
+  self.add_item(PollAPISelect())
 class ImgSelect(ui.Select):
  def __init__(self):
   opts=[discord.SelectOption(label=v[1],value=k,emoji=v[0],description=v[2])for k,v in IMG_MODELS.items()]
@@ -556,12 +564,10 @@ class DefaultSelect(ui.Select):
  def __init__(self):
   models=get_models();fast=["groq","cerebras","sambanova","cloudflare","poll_free"]
   opts=[discord.SelectOption(label=models[m]["n"],value=m,emoji=models[m]["e"],description="Set default")for m in fast if m in models]
-  if not opts:opts=[discord.SelectOption(label="No models",value="none")]
-  super().__init__(placeholder="Set Default Model...",options=opts)
+  super().__init__(placeholder="Set Default Model...",options=opts if opts else[discord.SelectOption(label="None",value="none")])
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
-  db.set_setting("public_default",self.values[0])
-  info=get_model_info(self.values[0])
+  db.set_setting("public_default",self.values[0]);info=get_model_info(self.values[0])
   await i.response.send_message(f"✅ Default: {info['e']} **{info['n']}**",ephemeral=True)
 class DefaultView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(DefaultSelect())
@@ -577,46 +583,14 @@ class ShieldInfoSelect(ui.Select):
    if isinstance(d,dict)and d.get("success")is not False:
     for k,v in d.items():
      if k not in["success","error"]:embed.add_field(name=str(k).replace("_"," ").title(),value=f"`{v}`",inline=True)
-    if len(embed.fields)==0:embed.description="No stats available"
    else:embed.description=f"❌ {d.get('error','No data')}"
   elif a=="sessions":
    d=shield.sessions();embed.title="🔄 Active Sessions"
    if isinstance(d,dict)and"sessions"in d:
     ss=d["sessions"]
     if ss:
-     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"ID:`{str(s.get('id','?'))[:15]}`\nUser:`{s.get('userId','?')}`",inline=True)
+     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"ID:`{str(s.get('id','?'))[:15]}`",inline=True)
     else:embed.description="✅ No active sessions"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="logs":
-   d=shield.logs();embed.title="📋 Access Logs"
-   if isinstance(d,dict)and"logs"in d:
-    ll=d["logs"]
-    if ll:embed.description="\n".join([f"• `{l.get('time','?')[:16]}` {l.get('service','?')} ({l.get('method','?')})"for l in ll[:10]])
-    else:embed.description="✅ No logs"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="bans":
-   d=shield.bans();embed.title="🚫 Ban List"
-   if isinstance(d,dict)and"bans"in d:
-    bb=d["bans"]
-    if bb:
-     for idx,b in enumerate(bb[:10]):embed.add_field(name=f"#{b.get('id',idx+1)}",value=f"Type:`{b.get('type','?')}`\nVal:`{str(b.get('value','?'))[:15]}`",inline=True)
-    else:embed.description="✅ No bans"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="wl":
-   d=shield.whitelist();embed.title="✅ Whitelist"
-   if isinstance(d,dict)and"whitelist"in d:
-    ww=d["whitelist"]
-    if ww:
-     for idx,w in enumerate(ww[:10]):embed.add_field(name=f"#{idx+1}",value=f"Type:`{w.get('type','?')}`\nVal:`{str(w.get('value','?'))[:15]}`",inline=True)
-    else:embed.description="ℹ️ Empty"
-   else:embed.description=f"❌ {d.get('error','No data')}"
-  elif a=="sus":
-   d=shield.suspended();embed.title="⏸️ Suspended"
-   if isinstance(d,dict)and"suspended"in d:
-    ss=d["suspended"]
-    if ss:
-     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"Type:`{s.get('type','?')}`\nVal:`{str(s.get('value','?'))[:15]}`",inline=True)
-    else:embed.description="✅ None"
    else:embed.description=f"❌ {d.get('error','No data')}"
   elif a=="health":
    d=shield.health();embed.title="💚 Shield Status"
@@ -624,16 +598,16 @@ class ShieldInfoSelect(ui.Select):
    embed.color=0x2ECC71 if d.get("success")else 0xE74C3C
   elif a=="botstats":
    s=db.get_stats();embed.title="📈 Bot Statistics"
-   embed.add_field(name="Total Commands",value=f"`{s['total']}`",inline=True)
+   embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
    embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
-   embed.add_field(name="Unique Users",value=f"`{s['users']}`",inline=True)
-   if s['top']:embed.add_field(name="Top Commands",value="\n".join([f"`{c[0]}`: {c[1]}"for c in s['top']]),inline=False)
+   embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
   elif a=="script":
    d=shield.script()
    if d.get("success")and d.get("script"):
     f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua")
-    return await i.followup.send("📜 **Loader Script:**",file=f,ephemeral=True)
-   else:embed.title="📜 Script";embed.description=f"❌ {d.get('error','Not available')}"
+    return await i.followup.send("📜 **Script:**",file=f,ephemeral=True)
+   else:embed.description=f"❌ {d.get('error','Not available')}"
+  else:embed.description="Data loaded"
   await i.followup.send(embed=embed,ephemeral=True)
 class ShieldActionSelect(ui.Select):
  def __init__(self):
@@ -646,7 +620,7 @@ class ShieldActionSelect(ui.Select):
   elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
   elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
   else:r={"success":False};msg="Unknown"
-  await i.followup.send(f"✅ {msg}!"if r.get("success")is not False else f"❌ Failed: {r.get('error','Unknown')}",ephemeral=True)
+  await i.followup.send(f"✅ {msg}!"if r.get("success")is not False else f"❌ Failed",ephemeral=True)
 class ShieldView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
@@ -677,8 +651,7 @@ class ShieldManageView(ui.View):
  def __init__(self):super().__init__(timeout=120);self.add_item(ShieldManageSelect())
 @bot.event
 async def on_ready():
- logger.info(f"Bot ready:{bot.user}|Servers:{len(bot.guilds)}")
- fetch_panel_config()
+ logger.info(f"Bot ready:{bot.user}|Servers:{len(bot.guilds)}");fetch_panel_config()
  await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening,name=f"{PREFIX}help"))
 @bot.event
 async def on_command_error(ctx,err):
@@ -713,21 +686,18 @@ async def cmd_ai(ctx,*,prompt:str=None):
  except:pass
 @bot.command(name="model",aliases=["m"])
 async def cmd_model(ctx):
+ curr=db.get_model(ctx.author.id)if is_owner(ctx.author.id)else get_public_default()
+ info=get_model_info(curr)
  if not is_owner(ctx.author.id):
-  curr=get_public_default();info=get_model_info(curr)
-  return await ctx.send(f"ℹ️ Current: {info['e']} **{info['n']}** (Public Default)",delete_after=10)
- curr=db.get_model(ctx.author.id);info=get_model_info(curr)
+  return await ctx.send(f"ℹ️ Current: {info['e']} **{info['n']}** (Public Default)\n> `{info['m']}`",delete_after=10)
  models=get_models()
- cats={}
- for mid,mdata in models.items():
-  c=mdata.get("c","main")
-  if c not in cats:cats[c]=0
-  cats[c]+=1
- cat_text="\n".join([f"• **{c.title()}**: {n} models"for c,n in cats.items()])
+ cats={"main":0,"openrouter":0,"pollinations_free":0,"pollinations_api":0}
+ for m in models.values():
+  c=m.get("c","main")
+  if c in cats:cats[c]+=1
  embed=discord.Embed(title="🤖 Model Selection",color=0x5865F2)
- embed.add_field(name="Current Model",value=f"{info['e']} **{info['n']}**\n{info['d']}",inline=False)
- embed.add_field(name="Available Categories",value=cat_text,inline=False)
- embed.set_footer(text="Select a model from dropdowns below")
+ embed.add_field(name="Current Model",value=f"{info['e']} **{info['n']}**\n`{info['m']}`",inline=False)
+ embed.add_field(name="Categories",value=f"⚡ Main: {cats['main']}\n🌐 OpenRouter: {cats['openrouter']}\n🆓 Poll Free: {cats['pollinations_free']}\n🔑 Poll API: {cats['pollinations_api']}",inline=False)
  await ctx.send(embed=embed,view=ModelView())
  try:await ctx.message.delete()
  except:pass
@@ -737,12 +707,9 @@ async def cmd_sd(ctx):
  curr=get_public_default();info=get_model_info(curr)
  embed=discord.Embed(title="🌍 Set Public Default",description=f"**Current:** {info['e']} {info['n']}",color=0x3498DB)
  await ctx.send(embed=embed,view=DefaultView())
- try:await ctx.message.delete()
- except:pass
 @bot.command(name="imagine",aliases=["img","image"])
 async def cmd_img(ctx,*,prompt:str=None):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- if db.banned(ctx.author.id):return
  if not prompt:return await ctx.send(f"Usage:`{PREFIX}img <prompt>`",delete_after=5)
  ok,rem=rl.check(ctx.author.id,"img",15)
  if not ok:return await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
@@ -753,24 +720,16 @@ async def cmd_img(ctx,*,prompt:str=None):
   if data:
    f=discord.File(io.BytesIO(data),"image.png")
    embed=discord.Embed(title=f"🎨 {prompt[:80]}",color=0x5865F2)
-   embed.set_image(url="attachment://image.png")
-   embed.set_footer(text=f"{info[0]} {info[1]}")
-   await ctx.send(embed=embed,file=f)
-   await st.delete()
-   db.stat("img",ctx.author.id)
+   embed.set_image(url="attachment://image.png");embed.set_footer(text=f"{info[0]} {info[1]}")
+   await ctx.send(embed=embed,file=f);await st.delete();db.stat("img",ctx.author.id)
   else:await st.edit(content=f"❌ Failed:{err}")
  except Exception as e:await st.edit(content=f"❌ Error:{str(e)[:50]}")
- try:await ctx.message.delete()
- except:pass
 @bot.command(name="imgmodel",aliases=["im"])
 async def cmd_im(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
  curr=db.get_img(ctx.author.id);info=IMG_MODELS.get(curr,("?","?",""))
  embed=discord.Embed(title="🎨 Image Model",description=f"**Current:** {info[0]} {info[1]}",color=0x5865F2)
- for k,v in IMG_MODELS.items():embed.add_field(name=f"{v[0]} {v[1]}",value=f"{'✅'if k==curr else'⚪'} {v[2]}",inline=True)
  await ctx.send(embed=embed,view=ImgView())
- try:await ctx.message.delete()
- except:pass
 @bot.command(name="dump",aliases=["dl"])
 async def cmd_dump(ctx,url:str=None,*,flags:str=""):
  if db.banned(ctx.author.id):return
@@ -781,12 +740,9 @@ async def cmd_dump(ctx,url:str=None,*,flags:str=""):
  st=await ctx.send("🔄 Dumping...")
  result=dumper.dump(url,"--nocache"not in flags)
  if result["success"]:
-  content=result["content"]
-  ext="lua"if"local "in content[:500]else"html"if"<html"in content[:200].lower()else"txt"
+  content=result["content"];ext="lua"if"local "in content[:500]else"txt"
   f=discord.File(io.BytesIO(content.encode()),f"dump.{ext}")
-  await ctx.send(f"✅ Method:`{result['method']}`|Size:`{len(content):,}` bytes",file=f)
-  await st.delete()
-  db.stat("dump",ctx.author.id)
+  await ctx.send(f"✅ `{result['method']}`|`{len(content):,}` bytes",file=f);await st.delete();db.stat("dump",ctx.author.id)
  else:await st.edit(content=f"❌ {result.get('error','Failed')}")
 @bot.command(name="shield",aliases=["sh"])
 async def cmd_shield(ctx):
@@ -794,35 +750,28 @@ async def cmd_shield(ctx):
  st=shield.health()
  embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
  embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
- embed.add_field(name="URL",value=f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
  await ctx.send(embed=embed,view=ShieldView())
 @bot.command(name="shieldm",aliases=["sm"])
 async def cmd_sm(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
- embed.add_field(name="Format",value="`type:value`\nEx:`hwid:ABC123`",inline=True)
- embed.add_field(name="Types",value="`userId`,`hwid`,`ip`",inline=True)
+ embed.add_field(name="Format",value="`type:value`",inline=True)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
 async def cmd_sync(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- st=await ctx.send("🔄 Syncing config from panel...")
+ st=await ctx.send("🔄 Syncing...")
  config=fetch_panel_config(force=True)
  if config and config.get("last_fetch",0)>0:
   embed=discord.Embed(title="✅ Config Synced",color=0x2ECC71)
-  embed.add_field(name="🔑 API Keys",value=f"`{len(config.get('keys',{}))}` loaded",inline=True)
-  embed.add_field(name="🤖 Models",value=f"`{len(config.get('models',{}))}` loaded",inline=True)
-  embed.add_field(name="⚙️ Settings",value=f"`{len(config.get('settings',{}))}` loaded",inline=True)
+  embed.add_field(name="🔑 Keys",value=f"`{len(config.get('keys',{}))}`",inline=True)
+  embed.add_field(name="🤖 Models",value=f"`{len(config.get('models',{}))}`",inline=True)
+  embed.add_field(name="⚙️ Settings",value=f"`{len(config.get('settings',{}))}`",inline=True)
   await st.edit(content=None,embed=embed)
- else:await st.edit(content="❌ Failed to sync. Check CONFIG_PANEL_URL and CONFIG_BOT_SECRET")
- try:await ctx.message.delete()
- except:pass
+ else:await st.edit(content="❌ Failed to sync")
 @bot.command(name="clear",aliases=["reset"])
 async def cmd_clear(ctx):
- mem.clear(ctx.author.id)
- await ctx.send("🧹 Memory cleared!",delete_after=5)
- try:await ctx.message.delete()
- except:pass
+ mem.clear(ctx.author.id);await ctx.send("🧹 Memory cleared!",delete_after=5)
 @bot.command(name="ping",aliases=["p"])
 async def cmd_ping(ctx):
  curr=db.get_model(ctx.author.id)if is_owner(ctx.author.id)else get_public_default()
@@ -830,33 +779,39 @@ async def cmd_ping(ctx):
  embed=discord.Embed(title="🏓 Pong!",color=0x2ECC71)
  embed.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`",inline=True)
  embed.add_field(name="Model",value=f"{info['e']} {info['n']}",inline=True)
- embed.add_field(name="Role",value=f"`{'Owner'if is_owner(ctx.author.id)else'Public'}`",inline=True)
+ embed.add_field(name="API Model",value=f"`{info['m'][:25]}`",inline=True)
+ await ctx.send(embed=embed)
+@bot.command(name="cm",aliases=["currentmodel"])
+async def cmd_cm(ctx):
+ curr=db.get_model(ctx.author.id)if is_owner(ctx.author.id)else get_public_default()
+ info=get_model_info(curr)
+ embed=discord.Embed(title="🤖 Current Model",color=0x5865F2)
+ embed.add_field(name="Name",value=f"{info['e']} **{info['n']}**",inline=True)
+ embed.add_field(name="Provider",value=f"`{info['p']}`",inline=True)
+ embed.add_field(name="Category",value=f"`{info['c']}`",inline=True)
+ embed.add_field(name="API Model",value=f"`{info['m']}`",inline=False)
+ embed.add_field(name="Description",value=info['d'],inline=False)
  await ctx.send(embed=embed)
 @bot.command(name="status")
 async def cmd_status(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
  embed=discord.Embed(title="📊 Status",color=0x5865F2)
  config=fetch_panel_config();panel_ok=config is not None and config.get("last_fetch",0)>0
- panel_text=f"{'✅ Connected'if panel_ok else'❌ Not Connected'}"
- if panel_ok:panel_text+=f"\n`{len(config.get('keys',{}))}` keys,`{len(config.get('models',{}))}` models"
- if CONFIG_PANEL_URL:panel_text+=f"\n`{CONFIG_PANEL_URL[:30]}...`"
- else:panel_text="⚪ Not Configured"
- embed.add_field(name="🌐 Config Panel",value=panel_text,inline=False)
+ embed.add_field(name="🌐 Config Panel",value=f"{'✅ Connected'if panel_ok else'❌ Not Connected'}",inline=True)
  shield_ok=shield.health().get("success",False)
- embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield_ok else'❌ Offline'}"+(f"\n`{SHIELD_URL[:30]}...`"if SHIELD_URL else"\n⚪ Not Configured"),inline=False)
- keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("Cloudflare","cloudflare_token"),("Cohere","cohere"),("Mistral","mistral"),("Together","together"),("OpenRouter","openrouter"),("Tavily","tavily"),("HuggingFace","huggingface"),("Moonshot","moonshot")]
+ embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield_ok else'❌ Offline'}",inline=True)
+ keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
  st="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
  embed.add_field(name="🔑 API Keys",value=st,inline=True)
  models=get_models()
- embed.add_field(name="⚙️ Config",value=f"**Default:** `{get_public_default()}`\n**Prefix:** `{PREFIX}`\n**Models:** `{len(models)}`\n**Servers:** `{len(bot.guilds)}`",inline=True)
+ embed.add_field(name="⚙️ Config",value=f"Default:`{get_public_default()}`\nModels:`{len(models)}`\nServers:`{len(bot.guilds)}`",inline=True)
  await ctx.send(embed=embed)
 @bot.command(name="testai")
 async def cmd_testai(ctx):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- st=await ctx.send("🔄 Testing all providers...")
- test=[{"role":"user","content":"Say OK"}]
- results=[]
- providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("CF",lambda:call_cloudflare(test),get_api_key("cloudflare_token")),("Cohere",lambda:call_cohere(test),get_api_key("cohere")),("Mistral",lambda:call_mistral(test),get_api_key("mistral")),("Together",lambda:call_together(test),get_api_key("together")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("Tavily",lambda:call_tavily(test),get_api_key("tavily")),("Poll",lambda:call_pollinations(test,"poll_free"),True)]
+ st=await ctx.send("🔄 Testing providers...")
+ test=[{"role":"user","content":"Say OK"}];results=[]
+ providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("CF",lambda:call_cloudflare(test),get_api_key("cloudflare_token")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
  for n,f,k in providers:
   if not k:results.append(f"⚪{n}");continue
   try:r=f();results.append(f"✅{n}"if r else f"❌{n}")
@@ -872,92 +827,60 @@ async def cmd_bl(ctx,action:str=None,user:discord.User=None):
 @bot.command(name="allowuser",aliases=["au"])
 async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
  if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- if not user:return await ctx.send(f"Usage:`{PREFIX}au @user model1,model2` or `reset`",delete_after=10)
- if not models:
-  curr=db.get_allowed(user.id)
-  return await ctx.send(f"📋 {user.mention}:`{','.join(curr)or'None'}`",delete_after=10)
+ if not user:return await ctx.send(f"Usage:`{PREFIX}au @user model1,model2`",delete_after=10)
+ if not models:curr=db.get_allowed(user.id);return await ctx.send(f"📋 {user.mention}:`{','.join(curr)or'None'}`",delete_after=10)
  if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user.mention}",delete_after=5)
- all_models=get_all_model_ids()
- valid=[m.strip()for m in models.split(",")if m.strip()in all_models]
+ valid=[m.strip()for m in models.split(",")if m.strip()in get_all_model_ids()]
  if not valid:return await ctx.send("❌ Invalid models",delete_after=5)
- db.set_allowed(user.id,valid)
- await ctx.send(f"✅ {user.mention}:`{','.join(valid)}`",delete_after=5)
+ db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}:`{','.join(valid)}`",delete_after=5)
 @bot.command(name="stats")
 async def cmd_stats(ctx):
  s=db.get_stats()
- embed=discord.Embed(title="📈 Bot Statistics",color=0x5865F2)
+ embed=discord.Embed(title="📈 Statistics",color=0x5865F2)
  embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
  embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
  embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
- if s['top']:embed.add_field(name="Top Commands",value="\n".join([f"`{c[0]}`:{c[1]}"for c in s['top']]),inline=False)
  await ctx.send(embed=embed)
 @bot.command(name="help",aliases=["h"])
 async def cmd_help(ctx):
  embed=discord.Embed(title="📚 Help",color=0x5865F2)
  embed.add_field(name="💬 AI",value=f"`{PREFIX}ai <text>`\n`@{bot.user.name} <text>`",inline=False)
  if is_owner(ctx.author.id):
-  embed.add_field(name="🤖 Models",value=f"`{PREFIX}m` - Select\n`{PREFIX}sd` - Set default",inline=True)
-  embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select",inline=True)
+  embed.add_field(name="🤖 Models",value=f"`{PREFIX}m` - Select model\n`{PREFIX}cm` - Current model\n`{PREFIX}sd` - Set default",inline=True)
+  embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select model",inline=True)
   embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - Panel\n`{PREFIX}sm` - Manage",inline=True)
   embed.add_field(name="🔄 Sync",value=f"`{PREFIX}sync` - Resync config",inline=True)
   embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}bl` `{PREFIX}au` `{PREFIX}stats`",inline=True)
  embed.add_field(name="🔧 Utility",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping`",inline=True)
  await ctx.send(embed=embed)
-@bot.command(name="currentmodel",aliases=["cm"])
-async def cmd_cm(ctx):
- if is_owner(ctx.author.id):
-  curr=db.get_model(ctx.author.id)
- else:
-  curr=get_public_default()
- info=get_model_info(curr)
- embed=discord.Embed(title="🤖 Current Model",color=0x5865F2)
- embed.add_field(name="Model",value=f"{info['e']} **{info['n']}**",inline=True)
- embed.add_field(name="Description",value=info['d'],inline=True)
- embed.add_field(name="Provider",value=f"`{info['p']}`",inline=True)
- embed.add_field(name="Category",value=f"`{info['c']}`",inline=True)
- embed.set_footer(text=f"Role: {'Owner'if is_owner(ctx.author.id)else'Public'}")
- await ctx.send(embed=embed,delete_after=15)
-@bot.command(name="listmodels",aliases=["lm"])
+@bot.command(name="lm",aliases=["listmodels"])
 async def cmd_lm(ctx):
- models=get_models()
- cats={}
+ models=get_models();cats={}
  for mid,mdata in models.items():
   c=mdata.get("c","main")
   if c not in cats:cats[c]=[]
-  cats[c].append(f"{mdata['e']} `{mid}` - {mdata['n']}")
- embed=discord.Embed(title="📋 Available Models",color=0x5865F2)
+  cats[c].append(f"{mdata['e']} `{mid}`")
+ embed=discord.Embed(title="📋 All Models",color=0x5865F2)
  for cat,items in cats.items():
-  val="\n".join(items[:10])
-  if len(items)>10:val+=f"\n... +{len(items)-10} more"
-  embed.add_field(name=f"**{cat.title()}** ({len(items)})",value=val,inline=False)
+  val="\n".join(items[:8])
+  if len(items)>8:val+=f"\n+{len(items)-8} more"
+  embed.add_field(name=f"{cat.upper()} ({len(items)})",value=val,inline=True)
  await ctx.send(embed=embed)
 def run_flask():
  from flask import Flask,jsonify
  app=Flask(__name__)
  @app.route('/')
- def home():return f"Bot {bot.user} is running!"if bot.user else"Bot starting..."
+ def home():return f"Bot {bot.user} running!"if bot.user else"Starting..."
  @app.route('/health')
  def health():return jsonify({"status":"ok","bot":str(bot.user)if bot.user else"starting"})
- port=int(os.getenv("PORT",8080))
- app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
+ port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
 if __name__=="__main__":
- keep_alive()
- PORT=int(os.getenv("PORT",8080))
- ADMIN_KEY=os.getenv("WEB_ADMIN_KEY",os.getenv("ADMIN_KEY","admin123"))
- if HAS_WEB_PANEL and start_web_panel:
-  start_web_panel(host="0.0.0.0",port=PORT,admin_key=ADMIN_KEY)
-  print(f"🌐 Web Panel: http://0.0.0.0:{PORT}?key={ADMIN_KEY}")
- else:
-  threading.Thread(target=run_flask,daemon=True).start()
-  print(f"🌐 Health Check: http://0.0.0.0:{PORT}")
- print("="*50)
- print("🚀 Bot Starting...")
- print(f"👑 Owners: {OWNER_IDS}")
- print(f"🌍 Default: {get_public_default()}")
- print(f"🛡️ Shield (Web 1): {'✅'if SHIELD_URL else'❌'}")
- print(f"🌐 Config Panel (Web 2): {'✅'if CONFIG_PANEL_URL else'❌'}")
+ keep_alive();PORT=int(os.getenv("PORT",8080));ADMIN_KEY=os.getenv("WEB_ADMIN_KEY",os.getenv("ADMIN_KEY","admin123"))
+ if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=ADMIN_KEY);print(f"🌐 Web Panel: http://0.0.0.0:{PORT}")
+ else:threading.Thread(target=run_flask,daemon=True).start();print(f"🌐 Health: http://0.0.0.0:{PORT}")
+ print("="*50);print("🚀 Bot Starting...")
+ print(f"👑 Owners: {OWNER_IDS}");print(f"🌍 Default: {get_public_default()}")
+ print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"���� Config Panel: {'✅'if CONFIG_PANEL_URL else'❌'}")
  print("-"*50)
- for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("Cloudflare","cloudflare_token"),("OpenRouter","openrouter"),("Cohere","cohere"),("Mistral","mistral"),("Together","together"),("Tavily","tavily")]:
-  print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
- print("="*50)
- bot.run(DISCORD_TOKEN,log_handler=None)
+ for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]:print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
+ print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
