@@ -947,21 +947,26 @@ async def cmd_panel(ctx):
   await ctx.send(embed=embed)
  else:await ctx.send("❌ Config panel not configured",delete_after=5)
 def run_flask():
- from flask import Flask,jsonify;app=Flask(__name__)
- @app.route('/')
+ from flask import Flask,jsonify
+ fapp=Flask(__name__)
+ @fapp.route('/')
  def home():return f"Bot {bot.user} running! | {WATERMARK}"if bot.user else"Starting..."
- @app.route('/health')
+ @fapp.route('/health')
  def health():return jsonify({"status":"ok","bot_ready":bot.user is not None})
- app.run(host="0.0.0.0",port=int(os.getenv("PORT",8080)),debug=False,use_reloader=False)
+ fapp.run(host="0.0.0.0",port=int(os.getenv("PORT",8080)),debug=False,use_reloader=False,threaded=True)
+def run_panel():
+ if HAS_WEB_PANEL and start_web_panel:
+  try:start_web_panel(host="0.0.0.0",port=int(os.getenv("PORT",8080)),admin_key=os.getenv("ADMIN_KEY","admin123"))
+  except Exception as e:print(f"❌ Panel error: {e}")
 if __name__=="__main__":
  PORT=int(os.getenv("PORT",8080))
  if HAS_WEB_PANEL and start_web_panel:
-  import threading as th
-  th.Thread(target=lambda:start_web_panel(host="0.0.0.0",port=PORT,admin_key=os.getenv("ADMIN_KEY","admin123")),daemon=True).start()
-  print(f"🌐 Web Panel: http://0.0.0.0:{PORT}")
+  threading.Thread(target=run_panel,daemon=True).start()
+  print(f"🌐 Web Panel starting on port {PORT}...")
  else:
   keep_alive()
-  print(f"🚀 Health: http://0.0.0.0:{PORT}")
+  threading.Thread(target=run_flask,daemon=True).start()
+  print(f"🚀 Flask Health on port {PORT}")
  print("="*50)
  print(f"🚀 Bot Starting... | {WATERMARK}")
  print(f"👑 Owners: {OWNER_IDS}")
