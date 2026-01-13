@@ -492,4 +492,193 @@ class ShieldInfoSelect(ui.Select):
   elif a=="bans":d=shield.bans();embed.title="🚫 Bans";bb=d.get("bans",[])if isinstance(d,dict)else[];embed.description="\n".join([f"• #{b.get('id','?')} `{b.get('type','?')}:{str(b.get('value','?'))[:15]}`"for b in bb[:10]])if bb else"✅ No bans"
   elif a=="wl":d=shield.whitelist();embed.title="✅ Whitelist";ww=d.get("whitelist",[])if isinstance(d,dict)else[];embed.description="\n".join([f"• `{w.get('type','?')}:{str(w.get('value','?'))[:15]}`"for w in ww[:10]])if ww else"ℹ️ Empty"
   elif a=="sus":d=shield.suspended();embed.title="⏸️ Suspended";ss=d.get("suspended",[])if isinstance(d,dict)else[];embed.description="\n".join([f"• `{s.get('type','?')}:{str(s.get('value','?'))[:15]}`"for s in ss[:10]])if ss else"✅ None"
-  elif a=="health":d=shield.health();embed.title="💚 Health";embed.description="✅ **ONLINE**"if d.get("success")else"❌ **OFFLINE**";embe
+    elif a=="health":d=shield.health();embed.title="💚 Health";embed.description="✅ **ONLINE**"if d.get("success")else"❌ **OFFLINE**";embed.color=0x2ECC71 if d.get("success")else 0xE74C3C
+  elif a=="botstats":s=db.get_stats();embed.title="📈 Bot Stats";embed.add_field(name="Total",value=f"`{s['total']}`",inline=True);embed.add_field(name="Today",value=f"`{s['today']}`",inline=True);embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
+  elif a=="script":d=shield.script();
+   if d.get("success")and d.get("script"):f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua");return await i.followup.send("📜 Script:",file=f,ephemeral=True)
+   else:embed.title="📜 Script";embed.description=f"❌ {d.get('error','Not available')}"
+  await i.followup.send(embed=embed,ephemeral=True)
+class ShieldActionSelect(ui.Select):
+ def __init__(self):super().__init__(placeholder="Actions...",options=[discord.SelectOption(label="Clear Sessions",value="clear_s",emoji="🧹"),discord.SelectOption(label="Clear Logs",value="clear_l",emoji="🗑️"),discord.SelectOption(label="Clear Cache",value="clear_c",emoji="💾")],custom_id="shact")
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  await i.response.defer(ephemeral=True);a=self.values[0]
+  if a=="clear_s":r=shield.clear_sessions();msg="Sessions cleared"
+  elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
+  elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
+  else:r={"success":False};msg="Unknown"
+  await i.followup.send(f"✅ {msg}!"if r.get("success")is not False else f"❌ {r.get('error','Failed')}",ephemeral=True)
+class ShieldView(ui.View):
+ def __init__(self):super().__init__(timeout=None);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
+class ShieldManageSelect(ui.Select):
+ def __init__(self):super().__init__(placeholder="Manage...",options=[discord.SelectOption(label="Ban Player",value="ban_p",emoji="👤"),discord.SelectOption(label="Ban HWID",value="ban_h",emoji="💻"),discord.SelectOption(label="Ban IP",value="ban_i",emoji="🌐"),discord.SelectOption(label="Unban",value="unban",emoji="🔓"),discord.SelectOption(label="Add Whitelist",value="add_wl",emoji="➕"),discord.SelectOption(label="Remove Whitelist",value="rem_wl",emoji="➖"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀")],custom_id="shmng")
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  a=self.values[0];titles={"ban_p":"Ban Player","ban_h":"Ban HWID","ban_i":"Ban IP","unban":"Unban","add_wl":"Add Whitelist","rem_wl":"Remove Whitelist","sus":"Suspend","unsus":"Unsuspend","kill":"Kill Session"}
+  class ActionModal(ui.Modal,title=titles.get(a,"Action")):
+   val=ui.TextInput(label="Value",placeholder="ID/HWID/IP...",required=True)
+   reason=ui.TextInput(label="Reason",placeholder="Optional",required=False,default="Via Discord")
+   def __init__(s,act):super().__init__();s.act=act
+   async def on_submit(s,mi:discord.Interaction):
+    v=s.val.value.strip();r=s.reason.value.strip()or"Via Discord";res={"success":False}
+    if s.act=="ban_p":res=shield.add_ban(pid=v,reason=r)
+    elif s.act=="ban_h":res=shield.add_ban(hwid=v,reason=r)
+    elif s.act=="ban_i":res=shield.add_ban(ip=v,reason=r)
+    elif s.act=="unban":res=shield.rem_ban(v)
+    elif s.act=="add_wl":p=v.split(":",1);res=shield.add_wl(p[0]if len(p)>1 else"userId",p[-1])
+    elif s.act=="rem_wl":p=v.split(":",1);res=shield.rem_wl(p[0]if len(p)>1 else"userId",p[-1])
+    elif s.act=="sus":p=v.split(":",1);res=shield.suspend(p[0]if len(p)>1 else"userId",p[-1],r)
+    elif s.act=="unsus":p=v.split(":",1);res=shield.unsuspend(p[0]if len(p)>1 else"userId",p[-1])
+    elif s.act=="kill":res=shield.kill(v,r)
+    await mi.response.send_message(f"✅ Done: `{v}`"if res.get("success")is not False else f"❌ {res.get('error','Failed')}",ephemeral=True)
+  await i.response.send_modal(ActionModal(a))
+class ShieldManageView(ui.View):
+ def __init__(self):super().__init__(timeout=None);self.add_item(ShieldManageSelect())
+def split_msg(txt,lim=1950):
+ if not txt:return[""]
+ chunks=[]
+ while len(txt)>lim:sp=txt.rfind('\n',0,lim);sp=lim if sp==-1 else sp;chunks.append(txt[:sp]);txt=txt[sp:].lstrip()
+ if txt:chunks.append(txt)
+ return chunks
+async def send_resp(ch,content):
+ for c in split_msg(content):await ch.send(c)
+@bot.event
+async def on_ready():
+ logger.info(f"Bot ready: {bot.user} | Servers: {len(bot.guilds)}")
+ await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening,name=f"{PREFIX}help"))
+@bot.event
+async def on_command_error(ctx,err):
+ if isinstance(err,commands.CommandNotFound):return
+ logger.error(f"Error: {err}")
+@bot.event
+async def on_message(msg):
+ if msg.author.bot:return
+ if bot.user.mentioned_in(msg)and not msg.mention_everyone:
+  content=msg.content.replace(f'<@{bot.user.id}>','').replace(f'<@!{bot.user.id}>','').strip()
+  if content and not db.banned(msg.author.id):
+   ok,_=rl.check(msg.author.id,"ai",5)
+   if ok:
+    async with msg.channel.typing():resp,_=ask_ai(content,msg.author.id);await send_resp(msg.channel,resp);db.stat("ai",msg.author.id)
+  return
+ await bot.process_commands(msg)
+@bot.command(name="ai",aliases=["a","chat"])
+async def cmd_ai(ctx,*,prompt:str=None):
+ if db.banned(ctx.author.id)or not prompt:return
+ ok,_=rl.check(ctx.author.id,"ai",5)
+ if ok:
+  async with ctx.typing():resp,_=ask_ai(prompt,ctx.author.id);await send_resp(ctx.channel,resp);db.stat("ai",ctx.author.id)
+@bot.command(name="model",aliases=["m"])
+async def cmd_model(ctx):
+ if not is_owner(ctx.author.id):return await ctx.send(f"Model: {get_public_default()}",delete_after=10)
+ curr=db.get_model(ctx.author.id);m=MODELS.get(curr,{})
+ embed=discord.Embed(title="🤖 Models",description=f"Current: {m.get('e','')} {m.get('n','')}",color=0x5865F2)
+ await ctx.send(embed=embed,view=ModelView())
+@bot.command(name="setdefault",aliases=["sd"])
+async def cmd_sd(ctx):
+ if not is_owner(ctx.author.id):return
+ await ctx.send(embed=discord.Embed(title="🌍 Set Default",color=0x3498DB),view=DefaultView())
+@bot.command(name="imagine",aliases=["img"])
+async def cmd_img(ctx,*,prompt:str=None):
+ if not is_owner(ctx.author.id)or not prompt:return
+ st=await ctx.send("🎨 Generating...")
+ data,err=await gen_image(prompt,db.get_img(ctx.author.id))
+ if data:f=discord.File(io.BytesIO(data),"image.png");await ctx.send(file=f);await st.delete();db.stat("img",ctx.author.id)
+ else:await st.edit(content=f"❌ {err}")
+@bot.command(name="imgmodel",aliases=["im"])
+async def cmd_im(ctx):
+ if not is_owner(ctx.author.id):return
+ await ctx.send(embed=discord.Embed(title="🎨 Image Model",color=0x5865F2),view=ImgView())
+@bot.command(name="dump",aliases=["dl"])
+async def cmd_dump(ctx,url:str=None):
+ if not url:return
+ if not url.startswith("http"):url="https://"+url
+ st=await ctx.send("🔄 Dumping...")
+ result=dumper.dump(url)
+ if result["success"]:
+  content=result["content"];ext="lua"if"local "in content[:500]else"txt"
+  f=discord.File(io.BytesIO(content.encode()),f"dump.{ext}")
+  await ctx.send(f"✅ {result['method']} | {len(content):,} bytes",file=f);await st.delete();db.stat("dump",ctx.author.id)
+ else:await st.edit(content=f"❌ {result.get('error')}")
+@bot.command(name="shield",aliases=["sh"])
+async def cmd_shield(ctx):
+ if not is_owner(ctx.author.id):return
+ st=shield.health();embed=discord.Embed(title="🛡️ Shield",color=0x2ECC71 if st.get("success")else 0xE74C3C)
+ embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
+ embed.add_field(name="URL",value=f"`{SHIELD_URL[:20]}...`"if len(SHIELD_URL)>20 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
+ await ctx.send(embed=embed,view=ShieldView())
+@bot.command(name="shieldm",aliases=["sm"])
+async def cmd_sm(ctx):
+ if not is_owner(ctx.author.id):return
+ embed=discord.Embed(title="⚙️ Shield Manage",description="Format: `type:value`\nTypes: `userId`, `hwid`, `ip`",color=0xE74C3C)
+ await ctx.send(embed=embed,view=ShieldManageView())
+@bot.command(name="clear",aliases=["reset"])
+async def cmd_clear(ctx):mem.clear(ctx.author.id);await ctx.send("🧹 Cleared!",delete_after=5)
+@bot.command(name="ping",aliases=["p"])
+async def cmd_ping(ctx):await ctx.send(f"🏓 {round(bot.latency*1000)}ms")
+@bot.command(name="status")
+async def cmd_status(ctx):
+ if not is_owner(ctx.author.id):return
+ keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Cohere","cohere"),("Mistral","mistral"),("Together","together")]
+ st="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
+ embed=discord.Embed(title="📊 Status",color=0x5865F2)
+ embed.add_field(name="🔑 API Keys",value=st,inline=True)
+ embed.add_field(name="🌐 Web Panel",value=f"`https://bot-dumper.onrender.com`",inline=False)
+ await ctx.send(embed=embed)
+@bot.command(name="testai")
+async def cmd_testai(ctx):
+ if not is_owner(ctx.author.id):return
+ st=await ctx.send("🔄 Testing...");test=[{"role":"user","content":"Say OK"}];results=[]
+ providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("Poll",lambda:call_pollinations(test,"poll_free"),True)]
+ for n,f,k in providers:
+  if not k:results.append(f"⚪{n}");continue
+  try:r=f();results.append(f"✅{n}"if r else f"❌{n}")
+  except:results.append(f"❌{n}")
+ await st.edit(content=" | ".join(results))
+@bot.command(name="blacklist",aliases=["bl"])
+async def cmd_bl(ctx,action:str=None,user:discord.User=None):
+ if not is_owner(ctx.author.id)or not action or not user:return
+ if action=="add":db.ban(user.id);await ctx.send(f"✅ Banned {user}")
+ elif action=="rem":db.unban(user.id);await ctx.send(f"✅ Unbanned {user}")
+@bot.command(name="allowuser",aliases=["au"])
+async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
+ if not is_owner(ctx.author.id):return
+ if not user:return await ctx.send(f"Usage: `{PREFIX}au @user model1,model2`")
+ if not models:return await ctx.send(f"📋 {user}: `{','.join(db.get_allowed(user.id))or'None'}`")
+ if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user}")
+ valid=[m.strip()for m in models.split(",")if m.strip()in ALL_MODELS]
+ if valid:db.set_allowed(user.id,valid);await ctx.send(f"✅ {user}: `{','.join(valid)}`")
+@bot.command(name="stats")
+async def cmd_stats(ctx):
+ s=db.get_stats()
+ await ctx.send(f"📈 Total: {s['total']} | Today: {s['today']} | Users: {s['users']}")
+@bot.command(name="help",aliases=["h"])
+async def cmd_help(ctx):
+ embed=discord.Embed(title="📚 Help",color=0x5865F2)
+ embed.add_field(name="AI",value=f"`{PREFIX}ai` `@mention`",inline=True)
+ embed.add_field(name="Models",value=f"`{PREFIX}m` `{PREFIX}sd`",inline=True)
+ embed.add_field(name="Image",value=f"`{PREFIX}img` `{PREFIX}im`",inline=True)
+ embed.add_field(name="Utils",value=f"`{PREFIX}dump` `{PREFIX}clear` `{PREFIX}ping`",inline=True)
+ if is_owner(ctx.author.id):embed.add_field(name="Admin",value=f"`{PREFIX}status` `{PREFIX}sh` `{PREFIX}sm` `{PREFIX}bl` `{PREFIX}au`",inline=True)
+ embed.add_field(name="🌐 Web",value=f"`https://bot-dumper.onrender.com?key=***`",inline=False)
+ await ctx.send(embed=embed)
+if __name__=="__main__":
+ keep_alive()
+ webconfig.init_defaults()
+ if HAS_FLASK:
+  flask_app=create_flask_app()
+  if flask_app:
+   def run_flask():
+    import logging as lg;lg.getLogger('werkzeug').setLevel(lg.ERROR)
+    flask_app.run(host="0.0.0.0",port=WEB_PORT,debug=False,use_reloader=False,threaded=True)
+   threading.Thread(target=run_flask,daemon=True).start()
+   print(f"🌐 Web Panel: http://0.0.0.0:{WEB_PORT}?key={WEB_ADMIN_KEY}")
+ print("="*50)
+ print("🚀 Bot Starting...")
+ print(f"👑 Owners: {OWNER_IDS}")
+ print(f"🌍 Default: {get_public_default()}")
+ print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}")
+ print("-"*50)
+ for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Cohere","cohere")]:
+  print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
+ print("="*50)
+ bot.run(DISCORD_TOKEN,log_handler=None)
