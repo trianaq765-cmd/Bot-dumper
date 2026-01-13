@@ -4,42 +4,20 @@ from dataclasses import dataclass
 from discord.ext import commands
 from discord import ui
 from urllib.parse import quote
-try:
- from web_panel import start_web_panel,get_key as wp_get_key,config as wp_config
- HAS_WEB_PANEL=True
+try:from web_panel import start_web_panel,get_key as wp_get_key,config as wp_config;HAS_WEB_PANEL=True
 except:start_web_panel=None;wp_get_key=None;wp_config=None;HAS_WEB_PANEL=False
 try:from keep_alive import keep_alive
 except:keep_alive=lambda:None
 logging.basicConfig(level=logging.INFO,format='%(asctime)s|%(levelname)s|%(message)s')
 logger=logging.getLogger(__name__)
-DISCORD_TOKEN=os.getenv("DISCORD_TOKEN")
-KEY_GROQ=os.getenv("GROQ_API_KEY","")
-KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY","")
-KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY","")
-KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY","")
-KEY_COHERE=os.getenv("COHERE_API_KEY","")
-CF_ACCOUNT_ID=os.getenv("CLOUDFLARE_ACCOUNT_ID","")
-CF_API_TOKEN=os.getenv("CLOUDFLARE_API_TOKEN","")
-KEY_TOGETHER=os.getenv("TOGETHER_API_KEY","")
-KEY_POLLINATIONS=os.getenv("POLLINATIONS_API_KEY","")
-KEY_TAVILY=os.getenv("TAVILY_API_KEY","")
-KEY_MISTRAL=os.getenv("MISTRAL_API_KEY","")
-KEY_REPLICATE=os.getenv("REPLICATE_API_TOKEN","")
-KEY_HUGGINGFACE=os.getenv("HUGGINGFACE_API_KEY","")
-KEY_MOONSHOT=os.getenv("MOONSHOT_API_KEY","")
-SHIELD_URL=os.getenv("SHIELD_URL","").rstrip("/")
-SHIELD_ADMIN_KEY=os.getenv("SHIELD_ADMIN_KEY","")
-CONFIG_PANEL_URL=os.getenv("CONFIG_PANEL_URL","").rstrip("/")
-CONFIG_BOT_SECRET=os.getenv("CONFIG_BOT_SECRET","")
-OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
-PREFIX=os.getenv("BOT_PREFIX",".")
-WATERMARK="ByToingDc"
+DISCORD_TOKEN=os.getenv("DISCORD_TOKEN");KEY_GROQ=os.getenv("GROQ_API_KEY","");KEY_OPENROUTER=os.getenv("OPENROUTER_API_KEY","");KEY_CEREBRAS=os.getenv("CEREBRAS_API_KEY","");KEY_SAMBANOVA=os.getenv("SAMBANOVA_API_KEY","");KEY_COHERE=os.getenv("COHERE_API_KEY","");CF_ACCOUNT_ID=os.getenv("CLOUDFLARE_ACCOUNT_ID","");CF_API_TOKEN=os.getenv("CLOUDFLARE_API_TOKEN","");KEY_TOGETHER=os.getenv("TOGETHER_API_KEY","");KEY_POLLINATIONS=os.getenv("POLLINATIONS_API_KEY","");KEY_TAVILY=os.getenv("TAVILY_API_KEY","");KEY_MISTRAL=os.getenv("MISTRAL_API_KEY","");KEY_REPLICATE=os.getenv("REPLICATE_API_TOKEN","");KEY_HUGGINGFACE=os.getenv("HUGGINGFACE_API_KEY","");KEY_MOONSHOT=os.getenv("MOONSHOT_API_KEY","")
+SHIELD_URL=os.getenv("SHIELD_URL","").rstrip("/");SHIELD_ADMIN_KEY=os.getenv("SHIELD_ADMIN_KEY","");CONFIG_PANEL_URL=os.getenv("CONFIG_PANEL_URL","").rstrip("/");CONFIG_BOT_SECRET=os.getenv("CONFIG_BOT_SECRET","")
+OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()];PREFIX=os.getenv("BOT_PREFIX",".");WATERMARK="ByToingDc"
 if not DISCORD_TOKEN:print("DISCORD_TOKEN Missing");exit(1)
 intents=discord.Intents.default();intents.message_content=True
 bot=commands.Bot(command_prefix=PREFIX,intents=intents,help_command=None)
 _groq=None;_requests=None;_curl=None;_cloudscraper=None
-_panel_config={"keys":{},"models":{},"settings":{},"user_models":{},"last_fetch":0}
-_panel_lock=threading.Lock()
+_panel_config={"keys":{},"models":{},"settings":{},"user_models":{},"last_fetch":0};_panel_lock=threading.Lock()
 def get_requests():
  global _requests
  if _requests is None:import requests;_requests=requests
@@ -64,11 +42,7 @@ def fetch_panel_config(force=False):
   if not force and now-_panel_config.get("last_fetch",0)<60:return _panel_config if _panel_config.get("last_fetch",0)>0 else None
   try:
    r=get_requests().get(f"{CONFIG_PANEL_URL}/api/bot/config",headers={"X-Bot-Secret":CONFIG_BOT_SECRET},timeout=10)
-   if r.status_code==200:
-    data=r.json()
-    _panel_config={"keys":data.get("keys",{}),"models":data.get("models",{}),"settings":data.get("settings",{}),"user_models":data.get("user_models",{}),"last_fetch":now}
-    logger.info(f"Panel synced:{len(_panel_config['keys'])} keys,{len(_panel_config['models'])} models")
-    return _panel_config
+   if r.status_code==200:data=r.json();_panel_config={"keys":data.get("keys",{}),"models":data.get("models",{}),"settings":data.get("settings",{}),"user_models":data.get("user_models",{}),"last_fetch":now};logger.info(f"Panel synced:{len(_panel_config['keys'])} keys");return _panel_config
   except Exception as e:logger.warning(f"Panel fetch:{e}")
  return None
 def get_api_key(name):
@@ -87,7 +61,7 @@ def get_groq():
    try:from groq import Groq;_groq=Groq(api_key=k)
    except:pass
  return _groq
-DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B - Ultra Fast","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B - Fast Inference","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B - Enterprise","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B - Edge AI","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+ - Advanced RAG","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small - Efficient","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K - Long Context","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B - Largest","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Web Search AI","c":"main","p":"tavily","m":"search"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B via OpenRouter","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0 Flash","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"or_qwen":{"e":"💻","n":"OR-Qwen","d":"Qwen 2.5 72B","c":"openrouter","p":"openrouter","m":"qwen/qwen-2.5-72b-instruct:free"},"or_deepseek":{"e":"🌊","n":"OR-DeepSeek","d":"DeepSeek Chat","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-chat:free"},"or_mistral":{"e":"🅼","n":"OR-Mistral","d":"Mistral Nemo","c":"openrouter","p":"openrouter","m":"mistralai/mistral-nemo:free"},"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"OpenAI Free","c":"pollinations_free","p":"pollinations_free","m":"openai"},"pf_claude":{"e":"🆓","n":"PollFree-Claude","d":"Claude Free","c":"pollinations_free","p":"pollinations_free","m":"claude"},"pf_gemini":{"e":"🆓","n":"PollFree-Gemini","d":"Gemini Free","c":"pollinations_free","p":"pollinations_free","m":"gemini"},"pf_deepseek":{"e":"🆓","n":"PollFree-DeepSeek","d":"DeepSeek Free","c":"pollinations_free","p":"pollinations_free","m":"deepseek"},"pf_qwen":{"e":"🆓","n":"PollFree-Qwen","d":"Qwen 72B Free","c":"pollinations_free","p":"pollinations_free","m":"qwen-72b"},"pf_llama":{"e":"🆓","n":"PollFree-Llama","d":"Llama 3.3 Free","c":"pollinations_free","p":"pollinations_free","m":"llama"},"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Select Free","c":"pollinations_free","p":"pollinations_free","m":"auto"},"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI API","c":"pollinations_api","p":"pollinations_api","m":"openai"},"pa_claude":{"e":"🔑","n":"PollAPI-Claude","d":"Claude API","c":"pollinations_api","p":"pollinations_api","m":"claude"},"pa_gemini":{"e":"🔑","n":"PollAPI-Gemini","d":"Gemini API","c":"pollinations_api","p":"pollinations_api","m":"gemini"},"pa_mistral":{"e":"🔑","n":"PollAPI-Mistral","d":"Mistral API","c":"pollinations_api","p":"pollinations_api","m":"mistral"},"pa_deepseek":{"e":"🔑","n":"PollAPI-DeepSeek","d":"DeepSeek API","c":"pollinations_api","p":"pollinations_api","m":"deepseek"}}
+DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Web Search","c":"main","p":"tavily","m":"search"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"OpenAI Free","c":"pollinations_free","p":"pollinations_free","m":"openai"},"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Free","c":"pollinations_free","p":"pollinations_free","m":"auto"},"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI API","c":"pollinations_api","p":"pollinations_api","m":"openai"}}
 IMG_MODELS={"flux":("🎨","Flux","Standard"),"flux_pro":("⚡","Flux Pro","Pro"),"turbo":("🚀","Turbo","Fast"),"dalle":("🤖","DALL-E 3","OpenAI"),"sdxl":("🖼️","SDXL","SD")}
 def get_models():
  config=fetch_panel_config()
@@ -113,22 +87,21 @@ def get_model_info(model_id):
 def is_owner(uid):return uid in OWNER_IDS
 class ShieldAPI:
  def __init__(self,url,key):self.url=url;self.key=key;self.timeout=30
- def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json","Accept":"application/json"}
+ def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json"}
  def _req(self,method,ep,data=None):
-  if not self.url or not self.key:return{"success":False,"error":"Shield not configured"}
+  if not self.url:return{"success":False,"error":"Shield not configured"}
   try:
    url=f"{self.url}{ep}"
    if method=="GET":r=get_requests().get(url,headers=self._h(),timeout=self.timeout)
    elif method=="POST":r=get_requests().post(url,headers=self._h(),json=data or{},timeout=self.timeout)
    elif method=="DELETE":r=get_requests().delete(url,headers=self._h(),json=data,timeout=self.timeout)
-   else:return{"success":False,"error":"Invalid method"}
+   else:return{"success":False,"error":"Method"}
    if r.status_code in[200,201,204]:
     try:return r.json()
     except:return{"success":True}
    return{"success":False,"error":f"HTTP {r.status_code}"}
-  except Exception as e:return{"success":False,"error":str(e)[:100]}
+  except Exception as e:return{"success":False,"error":str(e)[:50]}
  def health(self):
-  if not self.url:return{"success":False}
   try:r=get_requests().get(f"{self.url}/api/keepalive",timeout=10);return{"success":r.status_code==200}
   except:return{"success":False}
  def stats(self):return self._req("GET","/api/admin/stats")
@@ -138,13 +111,13 @@ class ShieldAPI:
  def whitelist(self):return self._req("GET","/api/admin/whitelist")
  def suspended(self):return self._req("GET","/api/admin/suspended")
  def script(self):return self._req("GET","/api/admin/script")
- def add_ban(self,t,v,reason="Via Discord"):return self._req("POST","/api/admin/bans",{t:v,"reason":reason})
+ def add_ban(self,t,v,r="Via Discord"):return self._req("POST","/api/admin/bans",{t:v,"reason":r})
  def rem_ban(self,bid):return self._req("DELETE",f"/api/admin/bans/{bid}")
  def add_wl(self,t,v):return self._req("POST","/api/admin/whitelist",{"type":t,"value":v})
  def rem_wl(self,t,v):return self._req("POST","/api/admin/whitelist/remove",{"type":t,"value":v})
- def suspend(self,t,v,reason="Via Discord"):return self._req("POST","/api/admin/suspend",{"type":t,"value":v,"reason":reason})
+ def suspend(self,t,v,r="Via Discord"):return self._req("POST","/api/admin/suspend",{"type":t,"value":v,"reason":r})
  def unsuspend(self,t,v):return self._req("POST","/api/admin/unsuspend",{"type":t,"value":v})
- def kill(self,sid,reason="Via Discord"):return self._req("POST","/api/admin/kill-session",{"sessionId":sid,"reason":reason})
+ def kill(self,sid,r="Via Discord"):return self._req("POST","/api/admin/kill-session",{"sessionId":sid,"reason":r})
  def clear_sessions(self):return self._req("POST","/api/admin/sessions/clear")
  def clear_logs(self):return self._req("POST","/api/admin/logs/clear")
  def clear_cache(self):return self._req("POST","/api/admin/cache/clear")
@@ -152,12 +125,7 @@ shield=ShieldAPI(SHIELD_URL,SHIELD_ADMIN_KEY)
 class Database:
  def __init__(self,path="bot.db"):
   self.conn=sqlite3.connect(path,check_same_thread=False);self.lock=threading.Lock()
-  self.conn.executescript('''CREATE TABLE IF NOT EXISTS user_prefs(uid INTEGER PRIMARY KEY,img_model TEXT DEFAULT "flux");
-CREATE TABLE IF NOT EXISTS bot_settings(key TEXT PRIMARY KEY,value TEXT);
-CREATE TABLE IF NOT EXISTS stats(id INTEGER PRIMARY KEY,cmd TEXT,uid INTEGER,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS blacklist(uid INTEGER PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS allowed_users(uid INTEGER PRIMARY KEY,allowed_models TEXT DEFAULT "groq");
-CREATE TABLE IF NOT EXISTS dump_cache(url TEXT PRIMARY KEY,content TEXT,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);''')
+  self.conn.executescript('''CREATE TABLE IF NOT EXISTS user_prefs(uid INTEGER PRIMARY KEY,img_model TEXT DEFAULT "flux");CREATE TABLE IF NOT EXISTS bot_settings(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS stats(id INTEGER PRIMARY KEY,cmd TEXT,uid INTEGER,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS blacklist(uid INTEGER PRIMARY KEY);CREATE TABLE IF NOT EXISTS allowed_users(uid INTEGER PRIMARY KEY,allowed_models TEXT DEFAULT "groq");CREATE TABLE IF NOT EXISTS dump_cache(url TEXT PRIMARY KEY,content TEXT,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);''')
  def get_setting(self,k):
   with self.lock:r=self.conn.execute('SELECT value FROM bot_settings WHERE key=?',(k,)).fetchone();return r[0]if r else None
  def set_setting(self,k,v):
@@ -188,9 +156,7 @@ CREATE TABLE IF NOT EXISTS dump_cache(url TEXT PRIMARY KEY,content TEXT,ts TIMES
   with self.lock:
    total=self.conn.execute('SELECT COUNT(*)FROM stats').fetchone()[0]
    today=self.conn.execute('SELECT COUNT(*)FROM stats WHERE ts>datetime("now","-1 day")').fetchone()[0]
-   users=self.conn.execute('SELECT COUNT(DISTINCT uid)FROM stats').fetchone()[0]
-   top=self.conn.execute('SELECT cmd,COUNT(*)as c FROM stats GROUP BY cmd ORDER BY c DESC LIMIT 5').fetchall()
-   return{"total":total,"today":today,"users":users,"top":top}
+   return{"total":total,"today":today}
 db=Database()
 class RateLimiter:
  def __init__(self):self.cd=defaultdict(lambda:defaultdict(float));self.lock=threading.Lock()
@@ -441,10 +407,8 @@ async def send_ai_response(ch,content,model_id,ref_msg=None):
  chunks=split_msg(content)
  footer=f"\n\n-# {info['e']} *{WATERMARK}*"
  for i,c in enumerate(chunks):
-  if i==len(chunks)-1:
-   await ch.send(f"{c}{footer}",reference=ref_msg,mention_author=False)
-  else:
-   await ch.send(c,reference=ref_msg if i==0 else None,mention_author=False)
+  if i==len(chunks)-1:await ch.send(f"{c}{footer}",reference=ref_msg,mention_author=False)
+  else:await ch.send(c,reference=ref_msg if i==0 else None,mention_author=False)
 class ShieldInfoSelect(ui.Select):
  def __init__(self):
   opts=[discord.SelectOption(label="Statistics",value="stats",emoji="📊"),discord.SelectOption(label="Sessions",value="sessions",emoji="🔄"),discord.SelectOption(label="Logs",value="logs",emoji="📋"),discord.SelectOption(label="Bans",value="bans",emoji="🚫"),discord.SelectOption(label="Whitelist",value="wl",emoji="✅"),discord.SelectOption(label="Suspended",value="sus",emoji="⏸️"),discord.SelectOption(label="Health",value="health",emoji="💚"),discord.SelectOption(label="Bot Stats",value="botstats",emoji="📈"),discord.SelectOption(label="Script",value="script",emoji="📜")]
@@ -454,11 +418,12 @@ class ShieldInfoSelect(ui.Select):
   await i.response.defer(ephemeral=True);a=self.values[0];embed=discord.Embed(color=0x3498DB)
   try:
    if a=="stats":
-    d=shield.stats();embed.title="📊 Statistics"
+    d=shield.stats();embed.title="📊 Stats"
     if d.get("success")is False:embed.description=f"❌ {d.get('error','Failed')}"
     elif isinstance(d,dict):
-     for k,v in list(d.items())[:15]:
-      if k not in["success","error"]:embed.add_field(name=str(k).title(),value=f"`{str(v)[:50]}`",inline=True)
+     c=0
+     for k,v in d.items():
+      if k not in["success","error","message"]and c<15:embed.add_field(name=str(k).title(),value=f"`{str(v)[:50]}`",inline=True);c+=1
    elif a=="sessions":
     d=shield.sessions();embed.title="🔄 Sessions"
     if d.get("success")is False:embed.description=f"❌ {d.get('error','Failed')}"
@@ -492,6 +457,7 @@ class ShieldInfoSelect(ui.Select):
     s=db.get_stats();embed.title="📈 Bot Stats"
     embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
     embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
+    embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
    elif a=="script":
     d=shield.script()
     if d.get("script"):
@@ -501,17 +467,23 @@ class ShieldInfoSelect(ui.Select):
   except Exception as e:embed.description=f"Error: {str(e)[:100]}"
   embed.set_footer(text=WATERMARK)
   await i.followup.send(embed=embed,ephemeral=True)
+class ShieldActionSelect(ui.Select):
+ def __init__(self):
+  opts=[discord.SelectOption(label="Clear Sessions",value="clear_s",emoji="🧹"),discord.SelectOption(label="Clear Logs",value="clear_l",emoji="🗑️"),discord.SelectOption(label="Clear Cache",value="clear_c",emoji="💾")]
+  super().__init__(placeholder="Quick Actions...",options=opts)
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  await i.response.defer(ephemeral=True);a=self.values[0]
+  if a=="clear_s":r=shield.clear_sessions();msg="Sessions cleared"
+  elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
+  elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
+  else:r={"success":False};msg="Unknown"
+  await i.followup.send(f"✅ {msg}"if r.get("success")is not False else"❌ Failed",ephemeral=True)
+class ShieldView(ui.View):
+ def __init__(self):super().__init__(timeout=180);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
  def __init__(self):
-  opts=[
-   discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="Ban by ID/HWID/IP"),
-   discord.SelectOption(label="Unban ID",value="unban",emoji="🔓",description="Unban by Ban ID (Number)"),
-   discord.SelectOption(label="Whitelist",value="wl",emoji="✅",description="Add to whitelist"),
-   discord.SelectOption(label="Remove WL",value="rem_wl",emoji="➖",description="Remove from whitelist"),
-   discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="Suspend user"),
-   discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="Unsuspend user"),
-   discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Kill session by ID")
-  ]
+  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="Ban by ID/HWID/IP"),discord.SelectOption(label="Unban ID",value="unban",emoji="🔓",description="Unban by Ban ID (Number)"),discord.SelectOption(label="Whitelist",value="wl",emoji="✅",description="Add to whitelist"),discord.SelectOption(label="Remove WL",value="rem_wl",emoji="➖",description="Remove from whitelist"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="Suspend user"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="Unsuspend user"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Kill session by ID")]
   super().__init__(placeholder="⚙️ Select Action...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
@@ -551,7 +523,7 @@ class ShieldManageSelect(ui.Select):
     except Exception as e:await mi.followup.send(f"❌ **Error:** {str(e)[:100]}",ephemeral=True)
   await i.response.send_modal(SM(a))
 class ShieldManageView(ui.View):
- def __init__(self):super().__init__(timeout=120);self.add_item(ShieldManageSelect())
+ def __init__(self):super().__init__(timeout=180);self.add_item(ShieldManageSelect())
 class ImgSelect(ui.Select):
  def __init__(self):
   opts=[discord.SelectOption(label=v[1],value=k,emoji=v[0],description=v[2])for k,v in IMG_MODELS.items()]
@@ -630,11 +602,12 @@ async def cmd_lm(ctx):
   if c not in cats:cats[c]=[]
   cats[c].append(f"{m['e']} `{mid}`")
  embed=discord.Embed(title="📋 Available Models",color=0x5865F2)
+ names={"main":"⚡ Main","openrouter":"🌐 OpenRouter","pollinations_free":"🆓 Poll Free","pollinations_api":"🔑 Poll API","custom":"⚙️ Custom"}
  for cat,items in cats.items():
   if items:
    val="\n".join(items[:6])
    if len(items)>6:val+=f"\n+{len(items)-6} more"
-   embed.add_field(name=f"{cat.upper()} ({len(items)})",value=val,inline=True)
+   embed.add_field(name=f"{names.get(cat,cat)} ({len(items)})",value=val,inline=True)
  embed.set_footer(text=f"Set via Web Panel • {WATERMARK}")
  await ctx.send(embed=embed)
  try:await ctx.message.delete()
@@ -720,6 +693,7 @@ async def cmd_shield(ctx):
  st=shield.health()
  embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
  embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
+ embed.add_field(name="URL",value=f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldView())
 @bot.command(name="shieldm",aliases=["sm"])
@@ -733,6 +707,7 @@ async def cmd_sm(ctx):
  except:pass
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
  embed.add_field(name="Format",value="`type:value`\nEx:`hwid:ABC123`",inline=True)
+ embed.add_field(name="Types",value="`userId`,`hwid`,`ip`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
@@ -782,6 +757,11 @@ async def cmd_status(ctx):
  embed=discord.Embed(title="📊 Status",color=0x5865F2)
  embed.add_field(name="🌐 Panel",value=f"{'✅ Connected'if panel_ok else'❌ Offline'}",inline=True)
  embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield.health().get('success')else'❌ Offline'}",inline=True)
+ embed.add_field(name="📈 Commands",value=f"`{db.get_stats()['total']}`",inline=True)
+ keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
+ kst="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
+ embed.add_field(name="🔑 Keys",value=kst,inline=True)
+ embed.add_field(name="⚙️ Config",value=f"Default:`{get_default_model()}`\nModels:`{len(get_models())}`\nServers:`{len(bot.guilds)}`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
 @bot.command(name="testai")
@@ -811,6 +791,24 @@ async def cmd_bl(ctx,action:str=None,user:discord.User=None):
  if not action or not user:return await ctx.send(f"Usage:`{PREFIX}bl add/rem @user`",delete_after=10)
  if action in["add","ban"]:db.ban(user.id);await ctx.send(f"✅ Banned {user}\n-# *{WATERMARK}*",delete_after=5)
  elif action in["rem","remove","unban"]:db.unban(user.id);await ctx.send(f"✅ Unbanned {user}\n-# *{WATERMARK}*",delete_after=5)
+@bot.command(name="allowuser",aliases=["au"])
+async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
+ if not user:return await ctx.send(f"Usage:`{PREFIX}au @user model1,model2`",delete_after=10)
+ if not models:
+  curr=db.get_allowed(user.id)
+  return await ctx.send(f"📋 {user.mention}:`{','.join(curr)or'None'}`\n-# *{WATERMARK}*",delete_after=10)
+ if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user.mention}\n-# *{WATERMARK}*",delete_after=5)
+ all_m=list(get_models().keys())
+ valid=[m.strip()for m in models.split(",")if m.strip()in all_m]
+ if not valid:return await ctx.send("❌ Invalid models",delete_after=5)
+ db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}:`{','.join(valid)}`\n-# *{WATERMARK}*",delete_after=5)
 @bot.command(name="stats")
 async def cmd_stats(ctx):
  s=db.get_stats()
@@ -829,7 +827,7 @@ async def cmd_help(ctx):
  if is_owner(ctx.author.id):
   embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select",inline=True)
   embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - Panel\n`{PREFIX}sm` - Manage",inline=True)
-  embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl`",inline=True)
+  embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl` `{PREFIX}au`",inline=True)
  embed.add_field(name="🔧 Utility",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping` `{PREFIX}stats`",inline=True)
  embed.add_field(name="🌐 Panel",value=f"`{CONFIG_PANEL_URL[:30] if CONFIG_PANEL_URL else 'Not set'}...`",inline=True)
  embed.set_footer(text=WATERMARK)
@@ -851,7 +849,7 @@ def run_flask():
  @app.route('/')
  def home():return f"Bot {bot.user} running! | {WATERMARK}"if bot.user else"Starting..."
  @app.route('/health')
- def health():return jsonify({"status":"ok","bot":str(bot.user)if bot.user else"starting","watermark":WATERMARK})
+ def health():return jsonify({"status":"ok"})
  port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
 if __name__=="__main__":
  keep_alive();PORT=int(os.getenv("PORT",8080))
