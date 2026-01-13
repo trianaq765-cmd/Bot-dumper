@@ -2,7 +2,13 @@ import discord,os,io,re,time,json,logging,sqlite3,random,threading,hashlib,async
 from collections import defaultdict
 from dataclasses import dataclass
 from discord.ext import commands
+from discord import ui
 from urllib.parse import quote
+try:
+ from web_panel import start_web_panel,get_key as wp_get_key,config as wp_config
+ HAS_WEB_PANEL=True
+except:
+ start_web_panel=None;wp_get_key=None;wp_config=None;HAS_WEB_PANEL=False
 try:from keep_alive import keep_alive
 except:keep_alive=lambda:None
 logging.basicConfig(level=logging.INFO,format='%(asctime)s|%(levelname)s|%(message)s')
@@ -28,16 +34,29 @@ CONFIG_PANEL_URL=os.getenv("CONFIG_PANEL_URL","").rstrip("/")
 CONFIG_BOT_SECRET=os.getenv("CONFIG_BOT_SECRET","")
 OWNER_IDS=[int(x)for x in os.getenv("OWNER_IDS","0").split(",")if x.isdigit()]
 PREFIX=os.getenv("BOT_PREFIX",".")
+WATERMARK="ByToingDc"
 if not DISCORD_TOKEN:print("DISCORD_TOKEN Missing");exit(1)
 intents=discord.Intents.default();intents.message_content=True
 bot=commands.Bot(command_prefix=PREFIX,intents=intents,help_command=None)
-_groq=None;_requests=None
+_groq=None;_requests=None;_curl=None;_cloudscraper=None
 _panel_config={"keys":{},"models":{},"settings":{},"user_models":{},"last_fetch":0}
 _panel_lock=threading.Lock()
 def get_requests():
  global _requests
  if _requests is None:import requests;_requests=requests
  return _requests
+def get_curl():
+ global _curl
+ if _curl is None:
+  try:from curl_cffi import requests as r;_curl=r
+  except:_curl=None
+ return _curl
+def get_cloudscraper():
+ global _cloudscraper
+ if _cloudscraper is None:
+  try:import cloudscraper;_cloudscraper=cloudscraper.create_scraper(browser={'browser':'chrome','platform':'windows','mobile':False})
+  except:_cloudscraper=None
+ return _cloudscraper
 def fetch_panel_config(force=False):
  global _panel_config
  if not CONFIG_PANEL_URL or not CONFIG_BOT_SECRET:return None
@@ -51,11 +70,14 @@ def fetch_panel_config(force=False):
     _panel_config={"keys":data.get("keys",{}),"models":data.get("models",{}),"settings":data.get("settings",{}),"user_models":data.get("user_models",{}),"last_fetch":now}
     logger.info(f"Panel synced:{len(_panel_config['keys'])} keys,{len(_panel_config['models'])} models")
     return _panel_config
-  except Exception as e:logger.warning(f"Panel fetch failed:{e}")
+  except Exception as e:logger.warning(f"Panel fetch:{e}")
  return None
 def get_api_key(name):
  config=fetch_panel_config()
  if config and name in config.get("keys",{}):return config["keys"][name]
+ if wp_get_key:
+  k=wp_get_key(name)
+  if k:return k
  mapping={"groq":KEY_GROQ,"openrouter":KEY_OPENROUTER,"cerebras":KEY_CEREBRAS,"sambanova":KEY_SAMBANOVA,"cohere":KEY_COHERE,"cloudflare_token":CF_API_TOKEN,"cloudflare_account":CF_ACCOUNT_ID,"together":KEY_TOGETHER,"tavily":KEY_TAVILY,"mistral":KEY_MISTRAL,"replicate":KEY_REPLICATE,"huggingface":KEY_HUGGINGFACE,"moonshot":KEY_MOONSHOT,"pollinations":KEY_POLLINATIONS}
  return mapping.get(name,"")or os.getenv(name.upper()+"_API_KEY","")
 def get_groq():
@@ -66,7 +88,7 @@ def get_groq():
    try:from groq import Groq;_groq=Groq(api_key=k)
    except:pass
  return _groq
-DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Web Search","c":"main","p":"tavily","m":"search"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"or_qwen":{"e":"💻","n":"OR-Qwen","d":"Qwen 2.5 72B","c":"openrouter","p":"openrouter","m":"qwen/qwen-2.5-72b-instruct:free"},"or_deepseek":{"e":"🌊","n":"OR-DeepSeek","d":"DeepSeek","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-chat:free"},"or_mistral":{"e":"🅼","n":"OR-Mistral","d":"Mistral Nemo","c":"openrouter","p":"openrouter","m":"mistralai/mistral-nemo:free"},"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"OpenAI Free","c":"pollinations_free","p":"pollinations_free","m":"openai"},"pf_claude":{"e":"🆓","n":"PollFree-Claude","d":"Claude Free","c":"pollinations_free","p":"pollinations_free","m":"claude"},"pf_gemini":{"e":"🆓","n":"PollFree-Gemini","d":"Gemini Free","c":"pollinations_free","p":"pollinations_free","m":"gemini"},"pf_deepseek":{"e":"🆓","n":"PollFree-DeepSeek","d":"DeepSeek Free","c":"pollinations_free","p":"pollinations_free","m":"deepseek"},"pf_qwen":{"e":"🆓","n":"PollFree-Qwen","d":"Qwen 72B Free","c":"pollinations_free","p":"pollinations_free","m":"qwen-72b"},"pf_llama":{"e":"🆓","n":"PollFree-Llama","d":"Llama 3.3 Free","c":"pollinations_free","p":"pollinations_free","m":"llama"},"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Select Free","c":"pollinations_free","p":"pollinations_free","m":"auto"},"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI API","c":"pollinations_api","p":"pollinations_api","m":"openai"},"pa_claude":{"e":"🔑","n":"PollAPI-Claude","d":"Claude API","c":"pollinations_api","p":"pollinations_api","m":"claude"},"pa_gemini":{"e":"🔑","n":"PollAPI-Gemini","d":"Gemini API","c":"pollinations_api","p":"pollinations_api","m":"gemini"},"pa_mistral":{"e":"🔑","n":"PollAPI-Mistral","d":"Mistral API","c":"pollinations_api","p":"pollinations_api","m":"mistral"},"pa_deepseek":{"e":"🔑","n":"PollAPI-DeepSeek","d":"DeepSeek API","c":"pollinations_api","p":"pollinations_api","m":"deepseek"}}
+DEFAULT_MODELS={"groq":{"e":"⚡","n":"Groq","d":"Llama 3.3 70B - Ultra Fast","c":"main","p":"groq","m":"llama-3.3-70b-versatile"},"cerebras":{"e":"🧠","n":"Cerebras","d":"Llama 3.3 70B - Fast Inference","c":"main","p":"cerebras","m":"llama-3.3-70b"},"sambanova":{"e":"🦣","n":"SambaNova","d":"Llama 3.3 70B - Enterprise","c":"main","p":"sambanova","m":"Meta-Llama-3.3-70B-Instruct"},"cloudflare":{"e":"☁️","n":"Cloudflare","d":"Llama 3.3 70B - Edge AI","c":"main","p":"cloudflare","m":"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},"cohere":{"e":"🔷","n":"Cohere","d":"Command R+ - Advanced RAG","c":"main","p":"cohere","m":"command-r-plus-08-2024"},"mistral":{"e":"Ⓜ️","n":"Mistral","d":"Mistral Small - Efficient","c":"main","p":"mistral","m":"mistral-small-latest"},"together":{"e":"🤝","n":"Together","d":"Llama 3.3 Turbo","c":"main","p":"together","m":"meta-llama/Llama-3.3-70B-Instruct-Turbo"},"moonshot":{"e":"🌙","n":"Moonshot","d":"Kimi 128K - Long Context","c":"main","p":"moonshot","m":"moonshot-v1-8k"},"huggingface":{"e":"🤗","n":"HuggingFace","d":"Mixtral 8x7B","c":"main","p":"huggingface","m":"mistralai/Mixtral-8x7B-Instruct-v0.1"},"replicate":{"e":"🔄","n":"Replicate","d":"Llama 405B - Largest","c":"main","p":"replicate","m":"meta/meta-llama-3.1-405b-instruct"},"tavily":{"e":"🔍","n":"Tavily","d":"Web Search AI","c":"main","p":"tavily","m":"search"},"or_llama":{"e":"🦙","n":"OR-Llama","d":"Llama 3.3 70B via OpenRouter","c":"openrouter","p":"openrouter","m":"meta-llama/llama-3.3-70b-instruct:free"},"or_gemini":{"e":"💎","n":"OR-Gemini","d":"Gemini 2.0 Flash","c":"openrouter","p":"openrouter","m":"google/gemini-2.0-flash-exp:free"},"or_qwen":{"e":"💻","n":"OR-Qwen","d":"Qwen 2.5 72B","c":"openrouter","p":"openrouter","m":"qwen/qwen-2.5-72b-instruct:free"},"or_deepseek":{"e":"🌊","n":"OR-DeepSeek","d":"DeepSeek Chat","c":"openrouter","p":"openrouter","m":"deepseek/deepseek-chat:free"},"or_mistral":{"e":"🅼","n":"OR-Mistral","d":"Mistral Nemo","c":"openrouter","p":"openrouter","m":"mistralai/mistral-nemo:free"},"pf_openai":{"e":"🆓","n":"PollFree-OpenAI","d":"OpenAI Free","c":"pollinations_free","p":"pollinations_free","m":"openai"},"pf_claude":{"e":"🆓","n":"PollFree-Claude","d":"Claude Free","c":"pollinations_free","p":"pollinations_free","m":"claude"},"pf_gemini":{"e":"🆓","n":"PollFree-Gemini","d":"Gemini Free","c":"pollinations_free","p":"pollinations_free","m":"gemini"},"pf_deepseek":{"e":"🆓","n":"PollFree-DeepSeek","d":"DeepSeek Free","c":"pollinations_free","p":"pollinations_free","m":"deepseek"},"pf_qwen":{"e":"🆓","n":"PollFree-Qwen","d":"Qwen 72B Free","c":"pollinations_free","p":"pollinations_free","m":"qwen-72b"},"pf_llama":{"e":"🆓","n":"PollFree-Llama","d":"Llama 3.3 Free","c":"pollinations_free","p":"pollinations_free","m":"llama"},"poll_free":{"e":"🌸","n":"PollFree-Auto","d":"Auto Select Free","c":"pollinations_free","p":"pollinations_free","m":"auto"},"pa_openai":{"e":"🔑","n":"PollAPI-OpenAI","d":"OpenAI API","c":"pollinations_api","p":"pollinations_api","m":"openai"},"pa_claude":{"e":"🔑","n":"PollAPI-Claude","d":"Claude API","c":"pollinations_api","p":"pollinations_api","m":"claude"},"pa_gemini":{"e":"🔑","n":"PollAPI-Gemini","d":"Gemini API","c":"pollinations_api","p":"pollinations_api","m":"gemini"},"pa_mistral":{"e":"🔑","n":"PollAPI-Mistral","d":"Mistral API","c":"pollinations_api","p":"pollinations_api","m":"mistral"},"pa_deepseek":{"e":"🔑","n":"PollAPI-DeepSeek","d":"DeepSeek API","c":"pollinations_api","p":"pollinations_api","m":"deepseek"}}
 IMG_MODELS={"flux":("🎨","Flux","Standard"),"flux_pro":("⚡","Flux Pro","Pro"),"turbo":("🚀","Turbo","Fast"),"dalle":("🤖","DALL-E 3","OpenAI"),"sdxl":("🖼️","SDXL","SD")}
 def get_models():
  config=fetch_panel_config()
@@ -91,35 +113,72 @@ def get_model_info(model_id):
  return{"e":"❓","n":"Unknown","d":"","c":"unknown","p":"unknown","m":model_id}
 def is_owner(uid):return uid in OWNER_IDS
 class ShieldAPI:
- def __init__(self,url,key):self.url=url;self.key=key
- def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json"}
+ def __init__(self,url,key):self.url=url;self.key=key;self.timeout=30
+ def _h(self):return{"x-admin-key":self.key,"Content-Type":"application/json","Accept":"application/json"}
  def _get(self,ep):
-  if not self.url:return{"success":False}
-  try:r=get_requests().get(f"{self.url}{ep}",headers=self._h(),timeout=15);return r.json()if r.status_code==200 else{"success":False}
-  except:return{"success":False}
+  if not self.url or not self.key:return{"success":False,"error":"Not configured"}
+  try:r=get_requests().get(f"{self.url}{ep}",headers=self._h(),timeout=self.timeout);return r.json()if r.status_code==200 else{"success":False,"error":f"HTTP {r.status_code}"}
+  except Exception as e:return{"success":False,"error":str(e)[:80]}
  def _post(self,ep,data=None):
-  if not self.url:return{"success":False}
-  try:r=get_requests().post(f"{self.url}{ep}",headers=self._h(),json=data or{},timeout=15);return r.json()if r.status_code in[200,201]else{"success":False}
-  except:return{"success":False}
+  if not self.url or not self.key:return{"success":False,"error":"Not configured"}
+  try:r=get_requests().post(f"{self.url}{ep}",headers=self._h(),json=data or{},timeout=self.timeout);return r.json()if r.status_code in[200,201]else{"success":False,"error":f"HTTP {r.status_code}"}
+  except Exception as e:return{"success":False,"error":str(e)[:80]}
+ def _del(self,ep):
+  if not self.url or not self.key:return{"success":False,"error":"Not configured"}
+  try:r=get_requests().delete(f"{self.url}{ep}",headers=self._h(),timeout=self.timeout);return r.json()if r.status_code==200 else{"success":False,"error":f"HTTP {r.status_code}"}
+  except Exception as e:return{"success":False,"error":str(e)[:80]}
+ def stats(self):return self._get("/api/admin/stats")
+ def sessions(self):return self._get("/api/admin/sessions")
+ def logs(self):return self._get("/api/admin/logs")
+ def bans(self):return self._get("/api/admin/bans")
+ def whitelist(self):return self._get("/api/admin/whitelist")
+ def suspended(self):return self._get("/api/admin/suspended")
+ def script(self):return self._get("/api/admin/script")
  def health(self):
   try:r=get_requests().get(f"{self.url}/api/keepalive",timeout=10);return{"success":r.status_code==200}
   except:return{"success":False}
- def stats(self):return self._get("/api/admin/stats")
- def bans(self):return self._get("/api/admin/bans")
  def add_ban(self,hwid=None,ip=None,pid=None,reason="Via Discord"):
   d={"reason":reason}
   if hwid:d["hwid"]=hwid
   if ip:d["ip"]=ip
   if pid:d["playerId"]=pid
   return self._post("/api/admin/bans",d)
+ def rem_ban(self,bid):return self._del(f"/api/admin/bans/{bid}")
+ def add_wl(self,t,v):return self._post("/api/admin/whitelist",{"type":t,"value":v})
+ def rem_wl(self,t,v):return self._post("/api/admin/whitelist/remove",{"type":t,"value":v})
+ def suspend(self,t,v,reason="Via Discord",dur=None):
+  d={"type":t,"value":v,"reason":reason}
+  if dur:d["duration"]=dur
+  return self._post("/api/admin/suspend",d)
+ def unsuspend(self,t,v):return self._post("/api/admin/unsuspend",{"type":t,"value":v})
+ def kill(self,sid,reason="Via Discord"):return self._post("/api/admin/kill-session",{"sessionId":sid,"reason":reason})
+ def clear_sessions(self):return self._post("/api/admin/sessions/clear",{})
+ def clear_logs(self):return self._post("/api/admin/logs/clear",{})
+ def clear_cache(self):return self._post("/api/admin/cache/clear",{})
 shield=ShieldAPI(SHIELD_URL,SHIELD_ADMIN_KEY)
 class Database:
  def __init__(self,path="bot.db"):
   self.conn=sqlite3.connect(path,check_same_thread=False);self.lock=threading.Lock()
-  self.conn.executescript('''CREATE TABLE IF NOT EXISTS stats(id INTEGER PRIMARY KEY,cmd TEXT,uid INTEGER,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+  self.conn.executescript('''CREATE TABLE IF NOT EXISTS user_prefs(uid INTEGER PRIMARY KEY,img_model TEXT DEFAULT "flux");
+CREATE TABLE IF NOT EXISTS bot_settings(key TEXT PRIMARY KEY,value TEXT);
+CREATE TABLE IF NOT EXISTS stats(id INTEGER PRIMARY KEY,cmd TEXT,uid INTEGER,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS blacklist(uid INTEGER PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS user_prefs(uid INTEGER PRIMARY KEY,img_model TEXT DEFAULT "flux");
+CREATE TABLE IF NOT EXISTS allowed_users(uid INTEGER PRIMARY KEY,allowed_models TEXT DEFAULT "groq");
 CREATE TABLE IF NOT EXISTS dump_cache(url TEXT PRIMARY KEY,content TEXT,ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);''')
+ def get_setting(self,k):
+  with self.lock:r=self.conn.execute('SELECT value FROM bot_settings WHERE key=?',(k,)).fetchone();return r[0]if r else None
+ def set_setting(self,k,v):
+  with self.lock:self.conn.execute('INSERT OR REPLACE INTO bot_settings VALUES(?,?)',(k,v));self.conn.commit()
+ def get_img(self,uid):
+  with self.lock:r=self.conn.execute('SELECT img_model FROM user_prefs WHERE uid=?',(uid,)).fetchone();return r[0]if r else"flux"
+ def set_img(self,uid,m):
+  with self.lock:self.conn.execute('INSERT OR REPLACE INTO user_prefs VALUES(?,?)',(uid,m));self.conn.commit()
+ def get_allowed(self,uid):
+  with self.lock:r=self.conn.execute('SELECT allowed_models FROM allowed_users WHERE uid=?',(uid,)).fetchone();return r[0].split(",")if r else[]
+ def set_allowed(self,uid,models):
+  with self.lock:self.conn.execute('INSERT OR REPLACE INTO allowed_users VALUES(?,?)',(uid,",".join(models)));self.conn.commit()
+ def rem_allowed(self,uid):
+  with self.lock:self.conn.execute('DELETE FROM allowed_users WHERE uid=?',(uid,));self.conn.commit()
  def stat(self,cmd,uid):
   with self.lock:self.conn.execute('INSERT INTO stats(cmd,uid)VALUES(?,?)',(cmd,uid));self.conn.commit()
  def banned(self,uid):
@@ -128,15 +187,17 @@ CREATE TABLE IF NOT EXISTS dump_cache(url TEXT PRIMARY KEY,content TEXT,ts TIMES
   with self.lock:self.conn.execute('INSERT OR IGNORE INTO blacklist VALUES(?)',(uid,));self.conn.commit()
  def unban(self,uid):
   with self.lock:self.conn.execute('DELETE FROM blacklist WHERE uid=?',(uid,));self.conn.commit()
- def get_img(self,uid):
-  with self.lock:r=self.conn.execute('SELECT img_model FROM user_prefs WHERE uid=?',(uid,)).fetchone();return r[0]if r else"flux"
- def set_img(self,uid,m):
-  with self.lock:self.conn.execute('INSERT OR REPLACE INTO user_prefs VALUES(?,?)',(uid,m));self.conn.commit()
+ def cache_dump(self,url,c):
+  with self.lock:h=hashlib.md5(url.encode()).hexdigest();self.conn.execute('INSERT OR REPLACE INTO dump_cache VALUES(?,?,CURRENT_TIMESTAMP)',(h,c[:500000]));self.conn.commit()
+ def get_cache(self,url):
+  with self.lock:h=hashlib.md5(url.encode()).hexdigest();r=self.conn.execute('SELECT content FROM dump_cache WHERE url=? AND ts>datetime("now","-1 hour")',(h,)).fetchone();return r[0]if r else None
  def get_stats(self):
   with self.lock:
    total=self.conn.execute('SELECT COUNT(*)FROM stats').fetchone()[0]
    today=self.conn.execute('SELECT COUNT(*)FROM stats WHERE ts>datetime("now","-1 day")').fetchone()[0]
-   return{"total":total,"today":today}
+   users=self.conn.execute('SELECT COUNT(DISTINCT uid)FROM stats').fetchone()[0]
+   top=self.conn.execute('SELECT cmd,COUNT(*)as c FROM stats GROUP BY cmd ORDER BY c DESC LIMIT 5').fetchall()
+   return{"total":total,"today":today,"users":users,"top":top}
 db=Database()
 class RateLimiter:
  def __init__(self):self.cd=defaultdict(lambda:defaultdict(float));self.lock=threading.Lock()
@@ -174,9 +235,27 @@ class Memory:
  def clear(self,uid):
   with self.lock:self.conv[uid]=[]
 mem=Memory()
+class Dumper:
+ def __init__(self):self.last=None
+ def dump(self,url,cache=True):
+  if cache:
+   c=db.get_cache(url)
+   if c:return{"success":True,"content":c,"method":"cache"}
+  req=get_requests();curl=get_curl();cs=get_cloudscraper();methods=[]
+  if curl:methods.append(("curl",lambda u:curl.get(u,impersonate="chrome120",headers={"User-Agent":"Roblox/WinInet"},timeout=25)))
+  if cs:methods.append(("cloudscraper",lambda u:cs.get(u,timeout=25)))
+  if req:methods.append(("requests",lambda u:req.get(u,headers={"User-Agent":"Roblox/WinInet"},timeout=25)))
+  if self.last:methods.sort(key=lambda x:x[0]!=self.last)
+  for name,func in methods:
+   try:
+    r=func(url)
+    if r.status_code==200 and len(r.text)>10:self.last=name;db.cache_dump(url,r.text)if cache else None;return{"success":True,"content":r.text,"method":name}
+   except:pass
+  return{"success":False,"error":"All methods failed"}
+dumper=Dumper()
 def get_system_prompt():
  p=get_panel_setting("system_prompt")
- return p if p else"You are a helpful AI assistant. Default: Bahasa Indonesia."
+ return p if p else"You are a helpful AI assistant. Default language: Bahasa Indonesia."
 def call_groq(msgs):
  c=get_groq()
  if not c:return None
@@ -364,19 +443,137 @@ def split_msg(txt,lim=1900):
   chunks.append(txt[:sp]);txt=txt[sp:].lstrip()
  if txt:chunks.append(txt)
  return chunks
-async def send_ai_response(ch,content,model_id):
+async def send_ai_response(ch,content,model_id,ref_msg=None):
  info=get_model_info(model_id)
  chunks=split_msg(content)
- footer=f"\n\n─────────────────────\n{info['e']} **{info['n']}** • `{info['m'][:30]}`"
- if len(chunks)==1:await ch.send(f"{chunks[0]}{footer}")
- else:
-  for i,c in enumerate(chunks):
-   if i==len(chunks)-1:await ch.send(f"{c}{footer}")
-   else:await ch.send(c)
+ footer=f"\n\n-# {info['e']} *{WATERMARK}*"
+ for i,c in enumerate(chunks):
+  if i==len(chunks)-1:
+   await ch.send(f"{c}{footer}",reference=ref_msg,mention_author=False)
+  else:
+   await ch.send(c,reference=ref_msg if i==0 else None,mention_author=False)
+class ShieldInfoSelect(ui.Select):
+ def __init__(self):
+  opts=[discord.SelectOption(label="Statistics",value="stats",emoji="📊"),discord.SelectOption(label="Sessions",value="sessions",emoji="🔄"),discord.SelectOption(label="Logs",value="logs",emoji="📋"),discord.SelectOption(label="Bans",value="bans",emoji="🚫"),discord.SelectOption(label="Whitelist",value="wl",emoji="✅"),discord.SelectOption(label="Suspended",value="sus",emoji="⏸️"),discord.SelectOption(label="Health",value="health",emoji="💚"),discord.SelectOption(label="Bot Stats",value="botstats",emoji="📈"),discord.SelectOption(label="Script",value="script",emoji="📜")]
+  super().__init__(placeholder="View Data...",options=opts)
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  await i.response.defer(ephemeral=True);a=self.values[0];embed=discord.Embed(color=0x3498DB)
+  if a=="stats":
+   d=shield.stats();embed.title="📊 Shield Statistics"
+   if isinstance(d,dict)and d.get("success")is not False:
+    for k,v in d.items():
+     if k not in["success","error"]:embed.add_field(name=str(k).replace("_"," ").title(),value=f"`{v}`",inline=True)
+   else:embed.description=f"❌ {d.get('error','No data')}"
+  elif a=="sessions":
+   d=shield.sessions();embed.title="🔄 Active Sessions"
+   if isinstance(d,dict)and"sessions"in d:
+    ss=d["sessions"]
+    if ss:
+     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"ID:`{str(s.get('id','?'))[:15]}`",inline=True)
+    else:embed.description="✅ No active sessions"
+   else:embed.description=f"❌ {d.get('error','No data')}"
+  elif a=="logs":
+   d=shield.logs();embed.title="📋 Access Logs"
+   if isinstance(d,dict)and"logs"in d:
+    ll=d["logs"]
+    if ll:embed.description="\n".join([f"• `{l.get('time','?')[:16]}` {l.get('service','?')}"for l in ll[:10]])
+    else:embed.description="✅ No logs"
+   else:embed.description=f"❌ {d.get('error','No data')}"
+  elif a=="bans":
+   d=shield.bans();embed.title="🚫 Ban List"
+   if isinstance(d,dict)and"bans"in d:
+    bb=d["bans"]
+    if bb:
+     for idx,b in enumerate(bb[:10]):embed.add_field(name=f"#{b.get('id',idx+1)}",value=f"Type:`{b.get('type','?')}`\nVal:`{str(b.get('value','?'))[:15]}`",inline=True)
+    else:embed.description="✅ No bans"
+   else:embed.description=f"❌ {d.get('error','No data')}"
+  elif a=="wl":
+   d=shield.whitelist();embed.title="✅ Whitelist"
+   if isinstance(d,dict)and"whitelist"in d:
+    ww=d["whitelist"]
+    if ww:
+     for idx,w in enumerate(ww[:10]):embed.add_field(name=f"#{idx+1}",value=f"Type:`{w.get('type','?')}`\nVal:`{str(w.get('value','?'))[:15]}`",inline=True)
+    else:embed.description="ℹ️ Empty"
+   else:embed.description=f"❌ {d.get('error','No data')}"
+  elif a=="sus":
+   d=shield.suspended();embed.title="⏸️ Suspended"
+   if isinstance(d,dict)and"suspended"in d:
+    ss=d["suspended"]
+    if ss:
+     for idx,s in enumerate(ss[:10]):embed.add_field(name=f"#{idx+1}",value=f"Type:`{s.get('type','?')}`",inline=True)
+    else:embed.description="✅ None"
+   else:embed.description=f"❌ {d.get('error','No data')}"
+  elif a=="health":
+   d=shield.health();embed.title="💚 Shield Status"
+   embed.description="✅ **ONLINE**"if d.get("success")else"❌ **OFFLINE**"
+   embed.color=0x2ECC71 if d.get("success")else 0xE74C3C
+  elif a=="botstats":
+   s=db.get_stats();embed.title="📈 Bot Statistics"
+   embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
+   embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
+   embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
+  elif a=="script":
+   d=shield.script()
+   if d.get("success")and d.get("script"):
+    f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua")
+    return await i.followup.send("📜 **Script:**",file=f,ephemeral=True)
+   else:embed.description=f"❌ {d.get('error','Not available')}"
+  await i.followup.send(embed=embed,ephemeral=True)
+class ShieldActionSelect(ui.Select):
+ def __init__(self):
+  opts=[discord.SelectOption(label="Clear Sessions",value="clear_s",emoji="🧹"),discord.SelectOption(label="Clear Logs",value="clear_l",emoji="🗑️"),discord.SelectOption(label="Clear Cache",value="clear_c",emoji="💾")]
+  super().__init__(placeholder="Quick Actions...",options=opts)
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  await i.response.defer(ephemeral=True);a=self.values[0]
+  if a=="clear_s":r=shield.clear_sessions();msg="Sessions cleared"
+  elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
+  elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
+  else:r={"success":False};msg="Unknown"
+  await i.followup.send(f"✅ {msg}!"if r.get("success")is not False else f"❌ Failed",ephemeral=True)
+class ShieldView(ui.View):
+ def __init__(self):super().__init__(timeout=120);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
+class ShieldManageSelect(ui.Select):
+ def __init__(self):
+  opts=[discord.SelectOption(label="Ban Player",value="ban_p",emoji="👤"),discord.SelectOption(label="Ban HWID",value="ban_h",emoji="💻"),discord.SelectOption(label="Ban IP",value="ban_i",emoji="🌐"),discord.SelectOption(label="Unban",value="unban",emoji="🔓"),discord.SelectOption(label="Add Whitelist",value="add_wl",emoji="➕"),discord.SelectOption(label="Remove Whitelist",value="rem_wl",emoji="➖"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀")]
+  super().__init__(placeholder="Management...",options=opts)
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  a=self.values[0];titles={"ban_p":"Ban Player","ban_h":"Ban HWID","ban_i":"Ban IP","unban":"Unban","add_wl":"Add Whitelist","rem_wl":"Remove Whitelist","sus":"Suspend","unsus":"Unsuspend","kill":"Kill Session"}
+  class ActionModal(ui.Modal,title=titles.get(a,"Action")):
+   val=ui.TextInput(label="Value",placeholder="ID/HWID/IP...",required=True)
+   reason=ui.TextInput(label="Reason",placeholder="Optional",required=False,default="Via Discord")
+   def __init__(s,act):super().__init__();s.act=act
+   async def on_submit(s,mi:discord.Interaction):
+    v=s.val.value.strip();r=s.reason.value.strip()or"Via Discord";res={"success":False}
+    if s.act=="ban_p":res=shield.add_ban(pid=v,reason=r)
+    elif s.act=="ban_h":res=shield.add_ban(hwid=v,reason=r)
+    elif s.act=="ban_i":res=shield.add_ban(ip=v,reason=r)
+    elif s.act=="unban":res=shield.rem_ban(v)
+    elif s.act=="add_wl":p=v.split(":",1);res=shield.add_wl(p[0]if len(p)>1 else"userId",p[-1])
+    elif s.act=="rem_wl":p=v.split(":",1);res=shield.rem_wl(p[0]if len(p)>1 else"userId",p[-1])
+    elif s.act=="sus":p=v.split(":",1);res=shield.suspend(p[0]if len(p)>1 else"userId",p[-1],r)
+    elif s.act=="unsus":p=v.split(":",1);res=shield.unsuspend(p[0]if len(p)>1 else"userId",p[-1])
+    elif s.act=="kill":res=shield.kill(v,r)
+    await mi.response.send_message(f"✅ Done: `{v}`"if res.get("success")is not False else f"❌ {res.get('error','Failed')}",ephemeral=True)
+  await i.response.send_modal(ActionModal(a))
+class ShieldManageView(ui.View):
+ def __init__(self):super().__init__(timeout=120);self.add_item(ShieldManageSelect())
+class ImgSelect(ui.Select):
+ def __init__(self):
+  opts=[discord.SelectOption(label=v[1],value=k,emoji=v[0],description=v[2])for k,v in IMG_MODELS.items()]
+  super().__init__(placeholder="Select Image Model...",options=opts)
+ async def callback(self,i:discord.Interaction):
+  if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
+  db.set_img(i.user.id,self.values[0]);v=IMG_MODELS.get(self.values[0],("?","?",""))
+  await i.response.send_message(f"✅ Image: {v[0]} **{v[1]}**",ephemeral=True)
+class ImgView(ui.View):
+ def __init__(self):super().__init__(timeout=120);self.add_item(ImgSelect())
 @bot.event
 async def on_ready():
  logger.info(f"Bot ready:{bot.user}|Servers:{len(bot.guilds)}");fetch_panel_config()
- await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening,name=f"{PREFIX}help"))
+ await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening,name=f"{PREFIX}help | {WATERMARK}"))
 @bot.event
 async def on_command_error(ctx,err):
  if isinstance(err,commands.CommandNotFound):return
@@ -389,37 +586,50 @@ async def on_message(msg):
   if content:
    if db.banned(msg.author.id):return
    ok,rem=rl.check(msg.author.id,"ai",5)
-   if not ok:return await msg.channel.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+   if not ok:
+    warn=await msg.channel.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+    return
    async with msg.channel.typing():
     resp,used=ask_ai(content,msg.author.id)
-    await send_ai_response(msg.channel,resp,used)
+    await send_ai_response(msg.channel,resp,used,msg)
     db.stat("ai",msg.author.id)
+   try:await msg.delete()
+   except:pass
   return
  await bot.process_commands(msg)
 @bot.command(name="ai",aliases=["a","chat"])
 async def cmd_ai(ctx,*,prompt:str=None):
  if db.banned(ctx.author.id):return
- if not prompt:return await ctx.send(f"Usage:`{PREFIX}ai <question>`",delete_after=10)
+ if not prompt:
+  await ctx.send(f"Usage:`{PREFIX}ai <question>`",delete_after=10)
+  try:await ctx.message.delete()
+  except:pass
+  return
  ok,rem=rl.check(ctx.author.id,"ai",5)
- if not ok:return await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+ if not ok:
+  await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ ref_msg=ctx.message
+ try:await ctx.message.delete();ref_msg=None
+ except:pass
  async with ctx.typing():
   resp,used=ask_ai(prompt,ctx.author.id)
-  await send_ai_response(ctx.channel,resp,used)
+  await send_ai_response(ctx.channel,resp,used,ref_msg)
   db.stat("ai",ctx.author.id)
- try:await ctx.message.delete()
- except:pass
 @bot.command(name="cm",aliases=["currentmodel","mymodel"])
 async def cmd_cm(ctx):
- model_id=get_model_for_user(ctx.author.id)
- info=get_model_info(model_id)
+ model_id=get_model_for_user(ctx.author.id);info=get_model_info(model_id)
  embed=discord.Embed(title="🤖 Your Current Model",color=0x5865F2)
  embed.add_field(name="Model",value=f"{info['e']} **{info['n']}**",inline=True)
  embed.add_field(name="Provider",value=f"`{info['p']}`",inline=True)
  embed.add_field(name="Category",value=f"`{info['c']}`",inline=True)
  embed.add_field(name="API Model",value=f"`{info['m']}`",inline=False)
- embed.add_field(name="Description",value=info.get('d','N/A'),inline=False)
- embed.set_footer(text=f"Change model via Web Panel: {CONFIG_PANEL_URL or'Not configured'}")
+ embed.set_footer(text=f"Change via Web Panel • {WATERMARK}")
  await ctx.send(embed=embed)
+ try:await ctx.message.delete()
+ except:pass
 @bot.command(name="models",aliases=["lm","listmodels"])
 async def cmd_lm(ctx):
  models=get_models()
@@ -435,14 +645,30 @@ async def cmd_lm(ctx):
    val="\n".join(items[:6])
    if len(items)>6:val+=f"\n+{len(items)-6} more"
    embed.add_field(name=f"{names.get(cat,cat)} ({len(items)})",value=val,inline=True)
- embed.set_footer(text=f"Set model via Web Panel")
+ embed.set_footer(text=f"Set via Web Panel • {WATERMARK}")
  await ctx.send(embed=embed)
+ try:await ctx.message.delete()
+ except:pass
 @bot.command(name="imagine",aliases=["img","image"])
 async def cmd_img(ctx,*,prompt:str=None):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- if not prompt:return await ctx.send(f"Usage:`{PREFIX}img <prompt>`",delete_after=5)
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ if not prompt:
+  await ctx.send(f"Usage:`{PREFIX}img <prompt>`",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
  ok,rem=rl.check(ctx.author.id,"img",15)
- if not ok:return await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+ if not ok:
+  await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
  model=db.get_img(ctx.author.id);info=IMG_MODELS.get(model,("🎨","Flux",""))
  st=await ctx.send(f"🎨 Generating with {info[0]} **{info[1]}**...")
  try:
@@ -450,126 +676,231 @@ async def cmd_img(ctx,*,prompt:str=None):
   if data:
    f=discord.File(io.BytesIO(data),"image.png")
    embed=discord.Embed(title=f"🎨 {prompt[:80]}",color=0x5865F2)
-   embed.set_image(url="attachment://image.png");embed.set_footer(text=f"{info[0]} {info[1]}")
+   embed.set_image(url="attachment://image.png")
+   embed.set_footer(text=f"{info[0]} {info[1]} • {WATERMARK}")
    await ctx.send(embed=embed,file=f);await st.delete();db.stat("img",ctx.author.id)
   else:await st.edit(content=f"❌ Failed:{err}")
  except Exception as e:await st.edit(content=f"❌ Error:{str(e)[:50]}")
 @bot.command(name="imgmodel",aliases=["im"])
-async def cmd_im(ctx,model:str=None):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- if model and model in IMG_MODELS:
-  db.set_img(ctx.author.id,model);info=IMG_MODELS[model]
-  return await ctx.send(f"✅ Image model: {info[0]} **{info[1]}**",delete_after=5)
- curr=db.get_img(ctx.author.id)
- embed=discord.Embed(title="🎨 Image Models",color=0x5865F2)
- for k,v in IMG_MODELS.items():embed.add_field(name=f"{v[0]} {v[1]}",value=f"{'✅'if k==curr else'⚪'} `{PREFIX}im {k}`",inline=True)
- await ctx.send(embed=embed)
+async def cmd_im(ctx):
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ curr=db.get_img(ctx.author.id);info=IMG_MODELS.get(curr,("?","?",""))
+ embed=discord.Embed(title="🎨 Image Model",description=f"**Current:** {info[0]} {info[1]}",color=0x5865F2)
+ embed.set_footer(text=WATERMARK)
+ await ctx.send(embed=embed,view=ImgView())
+ try:await ctx.message.delete()
+ except:pass
+@bot.command(name="dump",aliases=["dl"])
+async def cmd_dump(ctx,url:str=None,*,flags:str=""):
+ if db.banned(ctx.author.id):return
+ if not url:
+  await ctx.send(f"Usage:`{PREFIX}dump <url>`",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ ok,rem=rl.check(ctx.author.id,"dump",10)
+ if not ok:
+  await ctx.send(f"⏳ Wait {rem:.0f}s",delete_after=3)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
+ if not url.startswith("http"):url="https://"+url
+ st=await ctx.send("🔄 Dumping...")
+ result=dumper.dump(url,"--nocache"not in flags)
+ if result["success"]:
+  content=result["content"];ext="lua"if"local "in content[:500]else"html"if"<html"in content[:200].lower()else"txt"
+  f=discord.File(io.BytesIO(content.encode()),f"dump.{ext}")
+  await ctx.send(f"✅ `{result['method']}`|`{len(content):,}` bytes\n-# *{WATERMARK}*",file=f);await st.delete();db.stat("dump",ctx.author.id)
+ else:await st.edit(content=f"❌ {result.get('error','Failed')}")
 @bot.command(name="shield",aliases=["sh"])
 async def cmd_shield(ctx):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
  st=shield.health()
- embed=discord.Embed(title="🛡️ Shield",color=0x2ECC71 if st.get("success")else 0xE74C3C)
+ embed=discord.Embed(title="🛡️ Shield Panel",color=0x2ECC71 if st.get("success")else 0xE74C3C)
  embed.add_field(name="Status",value="🟢 ONLINE"if st.get("success")else"🔴 OFFLINE",inline=True)
- if st.get("success"):
-  stats=shield.stats()
-  if isinstance(stats,dict):
-   for k,v in list(stats.items())[:6]:
-    if k not in["success","error"]:embed.add_field(name=k.replace("_"," ").title(),value=f"`{v}`",inline=True)
- await ctx.send(embed=embed)
+ embed.add_field(name="URL",value=f"`{SHIELD_URL[:25]}...`"if len(SHIELD_URL)>25 else f"`{SHIELD_URL or'Not Set'}`",inline=True)
+ embed.set_footer(text=WATERMARK)
+ await ctx.send(embed=embed,view=ShieldView())
+@bot.command(name="shieldm",aliases=["sm"])
+async def cmd_sm(ctx):
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
+ embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
+ embed.add_field(name="Format",value="`type:value`\nEx:`hwid:ABC123`",inline=True)
+ embed.add_field(name="Types",value="`userId`,`hwid`,`ip`",inline=True)
+ embed.set_footer(text=WATERMARK)
+ await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
 async def cmd_sync(ctx):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
  st=await ctx.send("🔄 Syncing...")
  config=fetch_panel_config(force=True)
  if config and config.get("last_fetch",0)>0:
-  embed=discord.Embed(title="✅ Synced",color=0x2ECC71)
-  embed.add_field(name="Keys",value=f"`{len(config.get('keys',{}))}`",inline=True)
-  embed.add_field(name="Models",value=f"`{len(config.get('models',{}))}`",inline=True)
-  embed.add_field(name="Users",value=f"`{len(config.get('user_models',{}))}`",inline=True)
+  embed=discord.Embed(title="✅ Config Synced",color=0x2ECC71)
+  embed.add_field(name="🔑 Keys",value=f"`{len(config.get('keys',{}))}`",inline=True)
+  embed.add_field(name="🤖 Models",value=f"`{len(config.get('models',{}))}`",inline=True)
+  embed.add_field(name="👥 Users",value=f"`{len(config.get('user_models',{}))}`",inline=True)
+  embed.set_footer(text=WATERMARK)
   await st.edit(content=None,embed=embed)
- else:await st.edit(content="❌ Failed")
+ else:await st.edit(content="❌ Failed to sync")
 @bot.command(name="clear",aliases=["reset"])
 async def cmd_clear(ctx):
- mem.clear(ctx.author.id);await ctx.send("🧹 Cleared!",delete_after=5)
+ mem.clear(ctx.author.id)
+ await ctx.send(f"🧹 Memory cleared!\n-# *{WATERMARK}*",delete_after=5)
+ try:await ctx.message.delete()
+ except:pass
 @bot.command(name="ping",aliases=["p"])
 async def cmd_ping(ctx):
  model_id=get_model_for_user(ctx.author.id);info=get_model_info(model_id)
  embed=discord.Embed(title="🏓 Pong!",color=0x2ECC71)
  embed.add_field(name="Latency",value=f"`{round(bot.latency*1000)}ms`",inline=True)
  embed.add_field(name="Model",value=f"{info['e']} {info['n']}",inline=True)
+ embed.add_field(name="Role",value=f"`{'Owner'if is_owner(ctx.author.id)else'User'}`",inline=True)
+ embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
+ try:await ctx.message.delete()
+ except:pass
 @bot.command(name="status")
 async def cmd_status(ctx):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
  config=fetch_panel_config();panel_ok=config and config.get("last_fetch",0)>0
  embed=discord.Embed(title="📊 Status",color=0x5865F2)
- embed.add_field(name="🌐 Panel",value=f"{'✅'if panel_ok else'❌'}",inline=True)
- embed.add_field(name="🛡️ Shield",value=f"{'✅'if shield.health().get('success')else'❌'}",inline=True)
+ embed.add_field(name="🌐 Panel",value=f"{'✅ Connected'if panel_ok else'❌ Offline'}",inline=True)
+ embed.add_field(name="🛡️ Shield",value=f"{'✅ Online'if shield.health().get('success')else'❌ Offline'}",inline=True)
  embed.add_field(name="📈 Commands",value=f"`{db.get_stats()['total']}`",inline=True)
- keys=["groq","cerebras","sambanova","openrouter","mistral","together","pollinations"]
- kst="\n".join([f"{'✅'if get_api_key(k)else'❌'} {k.title()}"for k in keys])
+ keys=[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]
+ kst="\n".join([f"{'✅'if get_api_key(k)else'❌'} {n}"for n,k in keys])
  embed.add_field(name="🔑 Keys",value=kst,inline=True)
  embed.add_field(name="⚙️ Config",value=f"Default:`{get_default_model()}`\nModels:`{len(get_models())}`\nServers:`{len(bot.guilds)}`",inline=True)
+ embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
 @bot.command(name="testai")
 async def cmd_testai(ctx):
- if not is_owner(ctx.author.id):return await ctx.send("❌ Owner only!",delete_after=5)
- st=await ctx.send("🔄 Testing...")
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
+ st=await ctx.send("🔄 Testing providers...")
  test=[{"role":"user","content":"Say OK"}];results=[]
- providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
+ providers=[("Groq",lambda:call_groq(test),get_api_key("groq")),("Cerebras",lambda:call_cerebras(test),get_api_key("cerebras")),("SambaNova",lambda:call_sambanova(test),get_api_key("sambanova")),("CF",lambda:call_cloudflare(test),get_api_key("cloudflare_token")),("Cohere",lambda:call_cohere(test),get_api_key("cohere")),("Mistral",lambda:call_mistral(test),get_api_key("mistral")),("Together",lambda:call_together(test),get_api_key("together")),("OR",lambda:call_openrouter(test,"or_gemini"),get_api_key("openrouter")),("PollFree",lambda:call_pollinations_free(test,"poll_free"),True)]
  for n,f,k in providers:
   if not k:results.append(f"⚪{n}");continue
   try:r=f();results.append(f"✅{n}"if r else f"❌{n}")
   except:results.append(f"❌{n}")
- embed=discord.Embed(title="🧪 Test",description=" | ".join(results),color=0x5865F2)
+ embed=discord.Embed(title="🧪 AI Test",description=" | ".join(results),color=0x5865F2)
+ embed.set_footer(text=WATERMARK)
  await st.edit(content=None,embed=embed)
 @bot.command(name="blacklist",aliases=["bl","ban"])
 async def cmd_bl(ctx,action:str=None,user:discord.User=None):
  if not is_owner(ctx.author.id):return
+ try:await ctx.message.delete()
+ except:pass
  if not action or not user:return await ctx.send(f"Usage:`{PREFIX}bl add/rem @user`",delete_after=10)
- if action in["add","ban"]:db.ban(user.id);await ctx.send(f"✅ Banned {user}",delete_after=5)
- elif action in["rem","remove","unban"]:db.unban(user.id);await ctx.send(f"✅ Unbanned {user}",delete_after=5)
+ if action in["add","ban"]:db.ban(user.id);await ctx.send(f"✅ Banned {user}\n-# *{WATERMARK}*",delete_after=5)
+ elif action in["rem","remove","unban"]:db.unban(user.id);await ctx.send(f"✅ Unbanned {user}\n-# *{WATERMARK}*",delete_after=5)
+@bot.command(name="allowuser",aliases=["au"])
+async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
+ try:await ctx.message.delete()
+ except:pass
+ if not user:return await ctx.send(f"Usage:`{PREFIX}au @user model1,model2`",delete_after=10)
+ if not models:
+  curr=db.get_allowed(user.id)
+  return await ctx.send(f"📋 {user.mention}:`{','.join(curr)or'None'}`\n-# *{WATERMARK}*",delete_after=10)
+ if models.lower()=="reset":db.rem_allowed(user.id);return await ctx.send(f"✅ Reset {user.mention}\n-# *{WATERMARK}*",delete_after=5)
+ all_m=list(get_models().keys())
+ valid=[m.strip()for m in models.split(",")if m.strip()in all_m]
+ if not valid:return await ctx.send("❌ Invalid models",delete_after=5)
+ db.set_allowed(user.id,valid);await ctx.send(f"✅ {user.mention}:`{','.join(valid)}`\n-# *{WATERMARK}*",delete_after=5)
 @bot.command(name="stats")
 async def cmd_stats(ctx):
  s=db.get_stats()
- embed=discord.Embed(title="📈 Stats",color=0x5865F2)
+ embed=discord.Embed(title="📈 Bot Statistics",color=0x5865F2)
  embed.add_field(name="Total",value=f"`{s['total']}`",inline=True)
  embed.add_field(name="Today",value=f"`{s['today']}`",inline=True)
+ embed.add_field(name="Users",value=f"`{s['users']}`",inline=True)
+ if s['top']:embed.add_field(name="Top Commands",value="\n".join([f"`{c[0]}`:{c[1]}"for c in s['top']]),inline=False)
+ embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
+ try:await ctx.message.delete()
+ except:pass
 @bot.command(name="help",aliases=["h"])
 async def cmd_help(ctx):
  embed=discord.Embed(title="📚 Help",color=0x5865F2)
  embed.add_field(name="💬 AI",value=f"`{PREFIX}ai <text>`\n`@{bot.user.name} <text>`",inline=False)
- embed.add_field(name="🤖 Models",value=f"`{PREFIX}cm` - Current model\n`{PREFIX}models` - List all\n*Set via Web Panel*",inline=True)
+ embed.add_field(name="🤖 Models",value=f"`{PREFIX}cm` - Current\n`{PREFIX}models` - List\n*Set via Web Panel*",inline=True)
  if is_owner(ctx.author.id):
-  embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im [model]`",inline=True)
-  embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl` `{PREFIX}stats`",inline=True)
-  embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - Status",inline=True)
- embed.add_field(name="🔧 Utility",value=f"`{PREFIX}clear` `{PREFIX}ping`",inline=True)
- embed.set_footer(text=f"🌐 Config Panel: {CONFIG_PANEL_URL[:30] if CONFIG_PANEL_URL else 'Not set'}...")
+  embed.add_field(name="🎨 Image",value=f"`{PREFIX}img <prompt>`\n`{PREFIX}im` - Select",inline=True)
+  embed.add_field(name="🛡️ Shield",value=f"`{PREFIX}sh` - Panel\n`{PREFIX}sm` - Manage",inline=True)
+  embed.add_field(name="⚙️ Admin",value=f"`{PREFIX}status` `{PREFIX}testai`\n`{PREFIX}sync` `{PREFIX}bl` `{PREFIX}au`",inline=True)
+ embed.add_field(name="🔧 Utility",value=f"`{PREFIX}dump <url>`\n`{PREFIX}clear` `{PREFIX}ping` `{PREFIX}stats`",inline=True)
+ embed.add_field(name="🌐 Panel",value=f"`{CONFIG_PANEL_URL[:30] if CONFIG_PANEL_URL else 'Not set'}...`",inline=True)
+ embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed)
+ try:await ctx.message.delete()
+ except:pass
 @bot.command(name="panel")
 async def cmd_panel(ctx):
+ try:await ctx.message.delete()
+ except:pass
  if CONFIG_PANEL_URL:
-  embed=discord.Embed(title="🌐 Config Panel",description=f"Manage models, API keys, and settings via web panel.",color=0x5865F2)
+  embed=discord.Embed(title="🌐 Config Panel",description="Manage via web panel:",color=0x5865F2)
   embed.add_field(name="URL",value=f"`{CONFIG_PANEL_URL}`",inline=False)
   embed.add_field(name="Features",value="• Set Default Model\n• Set User Models\n• Manage API Keys\n• Add Custom Models\n• Bot Settings",inline=False)
+  embed.set_footer(text=WATERMARK)
   await ctx.send(embed=embed)
  else:await ctx.send("❌ Panel not configured",delete_after=5)
 def run_flask():
  from flask import Flask,jsonify
  app=Flask(__name__)
  @app.route('/')
- def home():return f"Bot {bot.user} running!"if bot.user else"Starting..."
+ def home():return f"Bot {bot.user} running! | {WATERMARK}"if bot.user else"Starting..."
  @app.route('/health')
- def health():return jsonify({"status":"ok"})
+ def health():return jsonify({"status":"ok","bot":str(bot.user)if bot.user else"starting","watermark":WATERMARK})
  port=int(os.getenv("PORT",8080));app.run(host="0.0.0.0",port=port,debug=False,use_reloader=False)
 if __name__=="__main__":
- keep_alive();PORT=int(os.getenv("PORT",8080))
- threading.Thread(target=run_flask,daemon=True).start()
- print("="*50);print("🚀 Bot Starting...")
+ keep_alive();PORT=int(os.getenv("PORT",8080));ADMIN_KEY=os.getenv("WEB_ADMIN_KEY",os.getenv("ADMIN_KEY","admin123"))
+ if HAS_WEB_PANEL and start_web_panel:start_web_panel(host="0.0.0.0",port=PORT,admin_key=ADMIN_KEY);print(f"🌐 Web Panel: http://0.0.0.0:{PORT}")
+ else:threading.Thread(target=run_flask,daemon=True).start();print(f"🌐 Health: http://0.0.0.0:{PORT}")
+ print("="*50);print(f"🚀 Bot Starting... | {WATERMARK}")
  print(f"👑 Owners: {OWNER_IDS}");print(f"🌍 Default: {get_default_model()}")
  print(f"🛡️ Shield: {'✅'if SHIELD_URL else'❌'}");print(f"🌐 Panel: {'✅'if CONFIG_PANEL_URL else'❌'}")
  print("-"*50)
- for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Pollinations","pollinations")]:print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
+ for n,k in[("Groq","groq"),("Cerebras","cerebras"),("SambaNova","sambanova"),("OpenRouter","openrouter"),("Mistral","mistral"),("Together","together"),("Cohere","cohere"),("Cloudflare","cloudflare_token"),("Tavily","tavily"),("Pollinations","pollinations")]:print(f"   {'✅'if get_api_key(k)else'❌'} {n}")
  print("="*50);bot.run(DISCORD_TOKEN,log_handler=None)
