@@ -713,7 +713,7 @@ async def cmd_lm(ctx):
 @bot.command(name="imagine",aliases=["img","image"])
 async def cmd_img(ctx,*,prompt:str=None):
  if not is_owner(ctx.author.id):
-  await ctx.send("❌ Owner only!",delete_after=5)
+  await ctx.send("Owner only!",delete_after=5)
   try:await ctx.message.delete()
   except:pass
   return
@@ -745,7 +745,7 @@ async def cmd_img(ctx,*,prompt:str=None):
 @bot.command(name="imgmodel",aliases=["im"])
 async def cmd_im(ctx):
  if not is_owner(ctx.author.id):
-  await ctx.send("❌ Owner only!",delete_after=5)
+  await ctx.send("Owner only!",delete_after=5)
   try:await ctx.message.delete()
   except:pass
   return
@@ -848,7 +848,7 @@ async def cmd_ping(ctx):
 @bot.command(name="status")
 async def cmd_status(ctx):
  if not is_owner(ctx.author.id):
-  await ctx.send("❌ Owner only!",delete_after=5)
+  await ctx.send("Owner only!",delete_after=5)
   try:await ctx.message.delete()
   except:pass
   return
@@ -898,7 +898,7 @@ async def cmd_bl(ctx,action:str=None,user:discord.User=None):
 @bot.command(name="allowuser",aliases=["au"])
 async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
  if not is_owner(ctx.author.id):
-  await ctx.send("❌ Owner only!",delete_after=5)
+  await ctx.send("Owner only!",delete_after=5)
   try:await ctx.message.delete()
   except:pass
   return
