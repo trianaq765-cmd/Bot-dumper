@@ -98,16 +98,18 @@ class ShieldAPI:
    url=f"{self.url}{ep}"
    if method=="GET":r=get_requests().get(url,headers=self._h(),timeout=self.timeout)
    elif method=="POST":r=get_requests().post(url,headers=self._h(),json=data or{},timeout=self.timeout)
-   elif method=="DELETE":r=get_requests().delete(url,headers=self._h(),json=data,timeout=self.timeout)
-   else:return{"success":False,"error":"Method"}
+   elif method=="DELETE":
+    if data:r=get_requests().delete(url,headers=self._h(),json=data,timeout=self.timeout)
+    else:r=get_requests().delete(url,headers=self._h(),timeout=self.timeout)
+   else:return{"success":False,"error":"Invalid method"}
    if r.status_code in[200,201,204]:
     try:return r.json()
     except:return{"success":True}
    try:err=r.json();return{"success":False,"error":f"HTTP {r.status_code}: {err.get('message',err.get('error','Unknown'))}"}
    except:return{"success":False,"error":f"HTTP {r.status_code}"}
-  except Exception as e:return{"success":False,"error":str(e)[:50]}
+  except Exception as e:return{"success":False,"error":str(e)[:100]}
  def health(self):
-  try:r=get_requests().get(f"{self.url}/api/keepalive",timeout=10);return{"success":r.status_code==200}
+  try:r=get_requests().get(f"{self.url}/health",timeout=10);return{"success":r.status_code==200}
   except:return{"success":False}
  def stats(self):return self._req("GET","/api/admin/stats")
  def sessions(self):return self._req("GET","/api/admin/sessions")
@@ -116,16 +118,26 @@ class ShieldAPI:
  def whitelist(self):return self._req("GET","/api/admin/whitelist")
  def suspended(self):return self._req("GET","/api/admin/suspended")
  def script(self):return self._req("GET","/api/admin/script")
- def add_ban(self,t,v,r="Via Discord"):t="playerId"if t in["userId","user","player"]else t;return self._req("POST","/api/admin/bans",{t:v,"reason":r})
+ def add_ban(self,t,v,r="Via Discord"):
+  if t in["userId","user","player"]:t="playerId"
+  return self._req("POST","/api/admin/bans",{t:v,"reason":r})
  def rem_ban(self,bid):return self._req("DELETE",f"/api/admin/bans/{bid}")
- def add_wl(self,t,v):t="userId"if t in["userId","user","player","playerId"]else t;return self._req("POST","/api/admin/whitelist",{"type":t,"value":str(v)})
- def rem_wl(self,t,v):t="userId"if t in["userId","user","player","playerId"]else t;return self._req("POST","/api/admin/whitelist/remove",{"type":t,"value":str(v)})
- def suspend(self,t,v,r="Via Discord"):return self._req("POST","/api/admin/suspend",{"type":t,"value":str(v),"reason":r})
+ def add_wl(self,t,v):
+  if t in["userId","user","player","playerId"]:t="userId"
+  return self._req("POST","/api/admin/whitelist",{"type":t,"value":str(v)})
+ def rem_wl(self,t,v):
+  if t in["userId","user","player","playerId"]:t="userId"
+  return self._req("POST","/api/admin/whitelist/remove",{"type":t,"value":str(v)})
+ def suspend(self,t,v,r="Via Discord",d=None):
+  data={"type":t,"value":str(v),"reason":r}
+  if d:data["duration"]=str(d)
+  return self._req("POST","/api/admin/suspend",data)
  def unsuspend(self,t,v):return self._req("POST","/api/admin/unsuspend",{"type":t,"value":str(v)})
  def kill(self,sid,r="Via Discord"):return self._req("POST","/api/admin/kill-session",{"sessionId":sid,"reason":r})
  def clear_sessions(self):return self._req("POST","/api/admin/sessions/clear")
  def clear_logs(self):return self._req("POST","/api/admin/logs/clear")
  def clear_cache(self):return self._req("POST","/api/admin/cache/clear")
+ def clear_bans(self):return self._req("POST","/api/admin/bans/clear")
 shield=ShieldAPI(SHIELD_URL,SHIELD_ADMIN_KEY)
 class Database:
  def __init__(self,path="bot.db"):
