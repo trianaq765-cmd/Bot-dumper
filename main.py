@@ -122,6 +122,23 @@ class ShieldAPI:
   if t in["userId","user","player"]:t="playerId"
   return self._req("POST","/api/admin/bans",{t:v,"reason":r})
  def rem_ban(self,bid):return self._req("DELETE",f"/api/admin/bans/{bid}")
+ def rem_ban_by_type(self,ban_type,value):
+  bans_data=self.bans()
+  if bans_data.get("success")==False:return bans_data
+  bans=bans_data.get("bans",bans_data if isinstance(bans_data,list)else[])
+  if not bans:return{"success":False,"error":"No bans found"}
+  t=ban_type.lower().strip()
+  if t in["userid","user","player","playerid"]:search_keys=["playerId","userId","player_id","user_id"]
+  elif t in["hwid","hardwareid"]:search_keys=["hwid","hardwareId","hardware_id"]
+  elif t in["ip","ipaddress"]:search_keys=["ip","ipAddress","ip_address"]
+  else:search_keys=[ban_type]
+  for ban in bans:
+   for key in search_keys:
+    ban_value=ban.get(key)
+    if ban_value and str(ban_value).lower()==str(value).lower():
+     ban_id=ban.get("banId")or ban.get("id")or ban.get("_id")
+     if ban_id:return self.rem_ban(str(ban_id))
+  return{"success":False,"error":f"Ban not found for {ban_type}:{value}"}
  def add_wl(self,t,v):
   if t in["userId","user","player","playerId"]:t="userId"
   return self._req("POST","/api/admin/whitelist",{"type":t,"value":str(v)})
@@ -586,12 +603,12 @@ class ShieldView(ui.View):
  def __init__(self):super().__init__(timeout=180);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
  def __init__(self):
-  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="hwid/playerId/ip:value"),discord.SelectOption(label="Unban",value="unban",emoji="🔓",description="Ban ID (hex from list)"),discord.SelectOption(label="Whitelist Add",value="wl",emoji="✅",description="userId/hwid/ip:value"),discord.SelectOption(label="Whitelist Remove",value="rem_wl",emoji="➖",description="userId/hwid/ip:value"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="userId/hwid:value"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="userId/hwid:value"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Session ID")]
+  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="playerId/hwid/ip:value"),discord.SelectOption(label="Unban",value="unban",emoji="🔓",description="playerId/hwid/ip:value"),discord.SelectOption(label="Whitelist Add",value="wl",emoji="✅",description="userId/hwid/ip:value"),discord.SelectOption(label="Whitelist Remove",value="rem_wl",emoji="➖",description="userId/hwid/ip:value"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="userId/hwid:value"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="userId/hwid:value"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Session ID")]
   super().__init__(placeholder="⚙️ Select Action...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   a=self.values[0]
-  if a=="unban":t="Unban User";l="Ban ID (Hex)";p="Example: A1B2C3D4"
+  if a=="unban":t="Unban User";l="Type:Value atau Ban ID";p="playerId:123 atau hwid:ABC atau BanID"
   elif a=="kill":t="Kill Session";l="Session ID";p="From session list"
   elif a in["wl","rem_wl"]:t="Whitelist";l="Type:Value";p="userId:123 or hwid:ABC or ip:1.2.3.4"
   elif a in["sus","unsus"]:t="Suspend";l="Type:Value";p="userId:123 or hwid:ABC"
@@ -609,7 +626,11 @@ class ShieldManageSelect(ui.Select):
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="playerId",v
       res=shield.add_ban(tp.strip(),val.strip(),r)
-     elif s.ac=="unban":res=shield.rem_ban(v)
+     elif s.ac=="unban":
+      if":"in v:
+       tp,val=v.split(":",1)
+       res=shield.rem_ban_by_type(tp.strip(),val.strip())
+      else:res=shield.rem_ban(v)
      elif s.ac=="wl":
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="userId",v
@@ -817,9 +838,9 @@ async def cmd_sm(ctx):
  try:await ctx.message.delete()
  except:pass
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
- embed.add_field(name="📝 Format",value="`type:value`\nEx: `hwid:ABC123`\nEx: `userId:12345`",inline=True)
- embed.add_field(name="📋 Types",value="`userId`\n`hwid`\n`ip`",inline=True)
- embed.add_field(name="ℹ️ Unban",value="Use **Ban ID** (hex)\nfrom `.sh` → Bans",inline=True)
+ embed.add_field(name="📝 Format",value="`type:value`\nEx: `hwid:ABC123`\nEx: `playerId:12345`",inline=True)
+ embed.add_field(name="📋 Types",value="`playerId`\n`hwid`\n`ip`",inline=True)
+ embed.add_field(name="ℹ️ Unban",value="Format sama:\n`playerId:123`\n`hwid:ABC`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
@@ -901,12 +922,17 @@ async def cmd_testai(ctx):
  await st.edit(content=None,embed=embed)
 @bot.command(name="blacklist",aliases=["bl","ban"])
 async def cmd_bl(ctx,action:str=None,user:discord.User=None):
- if not is_owner(ctx.author.id):return
+ if not is_owner(ctx.author.id):
+  await ctx.send("❌ Owner only!",delete_after=5)
+  try:await ctx.message.delete()
+  except:pass
+  return
  try:await ctx.message.delete()
  except:pass
  if not action or not user:return await ctx.send(f"Usage:`{PREFIX}bl add/rem @user`",delete_after=10)
  if action in["add","ban"]:db.ban(user.id);await ctx.send(f"✅ Banned {user}\n-# *{WATERMARK}*",delete_after=5)
  elif action in["rem","remove","unban"]:db.unban(user.id);await ctx.send(f"✅ Unbanned {user}\n-# *{WATERMARK}*",delete_after=5)
+ else:await ctx.send(f"❌ Invalid action: `{action}`\nUse: add/rem",delete_after=5)
 @bot.command(name="allowuser",aliases=["au"])
 async def cmd_au(ctx,user:discord.User=None,*,models:str=None):
  if not is_owner(ctx.author.id):
