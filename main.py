@@ -118,39 +118,63 @@ class ShieldAPI:
  def whitelist(self):return self._req("GET","/api/admin/whitelist")
  def suspended(self):return self._req("GET","/api/admin/suspended")
  def script(self):return self._req("GET","/api/admin/script")
- def add_ban(self,t,v,r="Via Discord"):
-  if t in["userId","user","player"]:t="playerId"
-  return self._req("POST","/api/admin/bans",{t:v,"reason":r})
- def rem_ban(self,bid):return self._req("DELETE",f"/api/admin/bans/{bid}")
+ def add_ban(self,ban_type,value,reason="Via Discord"):
+  data={"reason":reason}
+  t=ban_type.lower().strip()
+  if t in["userid","user","player","playerid"]:data["playerId"]=str(value)
+  elif t in["hwid","hardwareid"]:data["hwid"]=str(value)
+  elif t in["ip","ipaddress"]:data["ip"]=str(value)
+  else:data["playerId"]=str(value)
+  return self._req("POST","/api/admin/bans",data)
+ def rem_ban(self,ban_id):return self._req("DELETE",f"/api/admin/bans/{ban_id}")
  def rem_ban_by_type(self,ban_type,value):
   bans_data=self.bans()
   if bans_data.get("success")==False:return bans_data
-  bans=bans_data.get("bans",bans_data if isinstance(bans_data,list)else[])
+  bans=bans_data.get("bans",[])
   if not bans:return{"success":False,"error":"No bans found"}
   t=ban_type.lower().strip()
-  if t in["userid","user","player","playerid"]:search_keys=["playerId","userId","player_id","user_id"]
-  elif t in["hwid","hardwareid"]:search_keys=["hwid","hardwareId","hardware_id"]
-  elif t in["ip","ipaddress"]:search_keys=["ip","ipAddress","ip_address"]
-  else:search_keys=[ban_type]
+  if t in["userid","user","player","playerid"]:search_keys=["playerId"]
+  elif t in["hwid","hardwareid"]:search_keys=["hwid"]
+  elif t in["ip","ipaddress"]:search_keys=["ip"]
+  else:search_keys=["playerId","hwid","ip"]
   for ban in bans:
    for key in search_keys:
     ban_value=ban.get(key)
     if ban_value and str(ban_value).lower()==str(value).lower():
-     ban_id=ban.get("banId")or ban.get("id")or ban.get("_id")
+     ban_id=ban.get("banId")
      if ban_id:return self.rem_ban(str(ban_id))
   return{"success":False,"error":f"Ban not found for {ban_type}:{value}"}
- def add_wl(self,t,v):
-  if t in["userId","user","player","playerId"]:t="userId"
-  return self._req("POST","/api/admin/whitelist",{"type":t,"value":str(v)})
- def rem_wl(self,t,v):
-  if t in["userId","user","player","playerId"]:t="userId"
-  return self._req("POST","/api/admin/whitelist/remove",{"type":t,"value":str(v)})
- def suspend(self,t,v,r="Via Discord",d=None):
-  data={"type":t,"value":str(v),"reason":r}
-  if d:data["duration"]=str(d)
+ def add_wl(self,wl_type,value):
+  t=wl_type.lower().strip()
+  if t in["userid","user","player","playerid"]:t="userId"
+  elif t in["hwid","hardwareid"]:t="hwid"
+  elif t in["ip","ipaddress"]:t="ip"
+  else:t="userId"
+  return self._req("POST","/api/admin/whitelist",{"type":t,"value":str(value)})
+ def rem_wl(self,wl_type,value):
+  t=wl_type.lower().strip()
+  if t in["userid","user","player","playerid"]:t="userId"
+  elif t in["hwid","hardwareid"]:t="hwid"
+  elif t in["ip","ipaddress"]:t="ip"
+  else:t="userId"
+  return self._req("POST","/api/admin/whitelist/remove",{"type":t,"value":str(value)})
+ def suspend(self,sus_type,value,reason="Via Discord",duration=None):
+  t=sus_type.lower().strip()
+  if t in["userid","user","player","playerid"]:t="userId"
+  elif t in["hwid","hardwareid"]:t="hwid"
+  elif t in["session","sessionid"]:t="session"
+  else:t="userId"
+  data={"type":t,"value":str(value),"reason":reason}
+  if duration:data["duration"]=str(duration)
   return self._req("POST","/api/admin/suspend",data)
- def unsuspend(self,t,v):return self._req("POST","/api/admin/unsuspend",{"type":t,"value":str(v)})
- def kill(self,sid,r="Via Discord"):return self._req("POST","/api/admin/kill-session",{"sessionId":sid,"reason":r})
+ def unsuspend(self,sus_type,value):
+  t=sus_type.lower().strip()
+  if t in["userid","user","player","playerid"]:t="userId"
+  elif t in["hwid","hardwareid"]:t="hwid"
+  elif t in["session","sessionid"]:t="session"
+  else:t="userId"
+  return self._req("POST","/api/admin/unsuspend",{"type":t,"value":str(value)})
+ def kill(self,session_id,reason="Via Discord"):return self._req("POST","/api/admin/kill-session",{"sessionId":session_id,"reason":reason})
  def clear_sessions(self):return self._req("POST","/api/admin/sessions/clear")
  def clear_logs(self):return self._req("POST","/api/admin/logs/clear")
  def clear_cache(self):return self._req("POST","/api/admin/cache/clear")
@@ -488,40 +512,44 @@ class ShieldInfoSelect(ui.Select):
    if a=="stats":
     d=shield.stats();embed.title="📊 Shield Stats"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
-    elif isinstance(d,dict):
-     c=0
-     for k,v in d.items():
-      if k not in["success","error","message"]and c<15:embed.add_field(name=str(k).replace("_"," ").title(),value=f"`{str(v)[:50]}`",inline=True);c+=1
+    else:
+     stats=d.get("stats",d)
+     if isinstance(stats,dict):
+      c=0
+      for k,v in stats.items():
+       if k not in["success","error","message"]and c<15:embed.add_field(name=str(k).replace("_"," ").title(),value=f"`{str(v)[:50]}`",inline=True);c+=1
+     if d.get("sessions")is not None:embed.add_field(name="Active Sessions",value=f"`{d.get('sessions')}`",inline=True)
    elif a=="sessions":
     d=shield.sessions();embed.title="🔄 Active Sessions"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
-     ss=d.get("sessions",d if isinstance(d,list)else[])
+     ss=d.get("sessions",[])
      if ss:
       for idx,s in enumerate(ss[:8]):
-       sid=str(s.get('id',s.get('sessionId','?')))[:8]
-       uid=str(s.get('userId',s.get('playerId','?')))[:12]
-       embed.add_field(name=f"🔹 {sid}",value=f"**Player:** `{uid}`",inline=True)
+       sid=str(s.get('sessionId','?'))[:8]
+       uid=str(s.get('userId','?'))[:12]
+       age=s.get('age','?')
+       embed.add_field(name=f"🔹 {sid}",value=f"**User:** `{uid}`\n**Age:** `{age}s`",inline=True)
      else:embed.description="No active sessions"
    elif a=="logs":
     d=shield.logs();embed.title="📋 Recent Logs"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
-     ll=d.get("logs",d if isinstance(d,list)else[])
+     ll=d.get("logs",[])
      if ll:
       txt=[]
       for l in ll[:10]:
-       ts=str(l.get('time',l.get('timestamp',l.get('ts',''))))[:16]
-       act=l.get('action',l.get('service',l.get('type','?')))
-       msg=str(l.get('message',l.get('userId','')))[:30]
-       txt.append(f"`{ts}` **{act}** {msg}")
+       ts=str(l.get('ts',l.get('timestamp','')))[:16]
+       act=l.get('action','?')
+       client=l.get('client','?')
+       txt.append(f"`{ts}` **{act}** ({client})")
       embed.description="\n".join(txt)[:4096]
      else:embed.description="No logs"
    elif a=="bans":
     d=shield.bans();embed.title="🚫 Ban List"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
-     bb=d.get("bans",d if isinstance(d,list)else[])
+     bb=d.get("bans",[])
      if bb:
       for b in bb[:9]:
        bid=str(b.get('banId','?'))[:8]
@@ -547,26 +575,17 @@ class ShieldInfoSelect(ui.Select):
       if ips:embed.add_field(name=f"🌐 IPs ({len(ips)})",value="\n".join([f"`{x}`"for x in ips[:5]])+("..." if len(ips)>5 else""),inline=True)
       if owners:embed.add_field(name=f"👑 Owners ({len(owners)})",value="\n".join([f"`{x}`"for x in owners[:5]]),inline=True)
       if not(uids or hwids or ips or owners):embed.description="No whitelist entries"
-     elif isinstance(wl,list):
-      if wl:
-       for idx,w in enumerate(wl[:9]):
-        if isinstance(w,dict):wtype=w.get('type','?');wval=str(w.get('value','?'))[:15]
-        else:wtype="Value";wval=str(w)[:15]
-        embed.add_field(name=f"✅ #{idx+1}",value=f"**{wtype}:** `{wval}`",inline=True)
-      else:embed.description="No whitelist entries"
      else:embed.description="No whitelist entries"
    elif a=="sus":
     d=shield.suspended();embed.title="⏸️ Suspended Users"
     if d.get("success")==False:embed.description=f"❌ {d.get('error','Failed')}"
     else:
-     sus=d.get("suspended",d if isinstance(d,list)else[])
+     sus=d.get("suspended",[])
      if sus:
       for idx,s in enumerate(sus[:9]):
-       if isinstance(s,dict):
-        stype=s.get('type','?')
-        sval=str(s.get('value',s.get('playerId',s.get('hwid','?'))))[:15]
-        reason=str(s.get('reason',''))[:20]
-       else:stype="?";sval=str(s)[:15];reason=""
+       stype=s.get('type','?')
+       sval=str(s.get('value','?'))[:15]
+       reason=str(s.get('reason',''))[:20]
        embed.add_field(name=f"⏸️ #{idx+1}",value=f"**{stype}:** `{sval}`\n{reason}",inline=True)
      else:embed.description="No suspended users"
    elif a=="health":
@@ -582,14 +601,14 @@ class ShieldInfoSelect(ui.Select):
     d=shield.script()
     if d.get("script"):
      f=discord.File(io.BytesIO(d["script"].encode()),"loader.lua")
-     return await i.followup.send("📜 **Loader Script:**",file=f,ephemeral=True)
+     return await i.followup.send(f"📜 **Loader Script:**\nLength: `{d.get('length',0)}` | Lines: `{d.get('lines',0)}`",file=f,ephemeral=True)
     else:embed.description=f"❌ Script not available: {d.get('error','Unknown')}"
   except Exception as e:embed.description=f"❌ Error: {str(e)[:100]}"
   embed.set_footer(text=WATERMARK)
   await i.followup.send(embed=embed,ephemeral=True)
 class ShieldActionSelect(ui.Select):
  def __init__(self):
-  opts=[discord.SelectOption(label="Clear Sessions",value="clear_s",emoji="🧹"),discord.SelectOption(label="Clear Logs",value="clear_l",emoji="🗑️"),discord.SelectOption(label="Clear Cache",value="clear_c",emoji="💾")]
+  opts=[discord.SelectOption(label="Clear Sessions",value="clear_s",emoji="🧹"),discord.SelectOption(label="Clear Logs",value="clear_l",emoji="🗑️"),discord.SelectOption(label="Clear Cache",value="clear_c",emoji="💾"),discord.SelectOption(label="Clear All Bans",value="clear_b",emoji="🚫")]
   super().__init__(placeholder="Quick Actions...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
@@ -597,22 +616,23 @@ class ShieldActionSelect(ui.Select):
   if a=="clear_s":r=shield.clear_sessions();msg="Sessions cleared"
   elif a=="clear_l":r=shield.clear_logs();msg="Logs cleared"
   elif a=="clear_c":r=shield.clear_cache();msg="Cache cleared"
+  elif a=="clear_b":r=shield.clear_bans();msg="All bans cleared"
   else:r={"success":False};msg="Unknown"
   await i.followup.send(f"✅ {msg}"if r.get("success")else f"❌ Failed: {r.get('error','Unknown')}",ephemeral=True)
 class ShieldView(ui.View):
  def __init__(self):super().__init__(timeout=180);self.add_item(ShieldInfoSelect());self.add_item(ShieldActionSelect())
 class ShieldManageSelect(ui.Select):
  def __init__(self):
-  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="playerId/hwid/ip:value"),discord.SelectOption(label="Unban",value="unban",emoji="🔓",description="playerId/hwid/ip:value"),discord.SelectOption(label="Whitelist Add",value="wl",emoji="✅",description="userId/hwid/ip:value"),discord.SelectOption(label="Whitelist Remove",value="rem_wl",emoji="➖",description="userId/hwid/ip:value"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="userId/hwid:value"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="userId/hwid:value"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Session ID")]
+  opts=[discord.SelectOption(label="Ban User",value="ban",emoji="🚫",description="playerId/hwid/ip:value"),discord.SelectOption(label="Unban",value="unban",emoji="🔓",description="playerId/hwid/ip:value"),discord.SelectOption(label="Whitelist Add",value="wl",emoji="✅",description="userId/hwid/ip:value"),discord.SelectOption(label="Whitelist Remove",value="rem_wl",emoji="➖",description="userId/hwid/ip:value"),discord.SelectOption(label="Suspend",value="sus",emoji="⏸️",description="userId/hwid/session:value"),discord.SelectOption(label="Unsuspend",value="unsus",emoji="▶️",description="userId/hwid/session:value"),discord.SelectOption(label="Kill Session",value="kill",emoji="💀",description="Session ID")]
   super().__init__(placeholder="⚙️ Select Action...",options=opts)
  async def callback(self,i:discord.Interaction):
   if not is_owner(i.user.id):return await i.response.send_message("❌ Owner only!",ephemeral=True)
   a=self.values[0]
-  if a=="unban":t="Unban User";l="Type:Value atau Ban ID";p="playerId:123 atau hwid:ABC atau BanID"
-  elif a=="kill":t="Kill Session";l="Session ID";p="From session list"
-  elif a in["wl","rem_wl"]:t="Whitelist";l="Type:Value";p="userId:123 or hwid:ABC or ip:1.2.3.4"
-  elif a in["sus","unsus"]:t="Suspend";l="Type:Value";p="userId:123 or hwid:ABC"
-  else:t="Ban User";l="Type:Value";p="playerId:123 or hwid:ABC or ip:1.2.3.4"
+  if a=="unban":t="Unban User";l="Type:Value atau Ban ID";p="playerId:123 atau hwid:ABC atau A1B2C3D4"
+  elif a=="kill":t="Kill Session";l="Session ID";p="Session ID dari daftar sessions"
+  elif a in["wl","rem_wl"]:t="Whitelist";l="Type:Value";p="userId:123 atau hwid:ABC atau ip:1.2.3.4"
+  elif a in["sus","unsus"]:t="Suspend";l="Type:Value";p="userId:123 atau hwid:ABC atau session:XYZ"
+  else:t="Ban User";l="Type:Value";p="playerId:123 atau hwid:ABC atau ip:1.2.3.4"
   class SM(ui.Modal,title=t):
    val=ui.TextInput(label=l,placeholder=p,required=True)
    reason=ui.TextInput(label="Reason",required=False,default="Via Discord")
@@ -647,8 +667,9 @@ class ShieldManageSelect(ui.Select):
       if":"in v:tp,val=v.split(":",1)
       else:tp,val="userId",v
       res=shield.unsuspend(tp.strip(),val.strip())
-     elif s.ac=="kill":res=shield.kill(v,r)
-     if res.get("success")==True:await mi.followup.send(f"✅ **Success!**\n**Action:** `{s.ac}`\n**Value:** `{v}`\n-# *{WATERMARK}*",ephemeral=True)
+     elif s.ac=="kill":res=shield.kill(v,r if r else"Via Discord")
+     if res.get("success")==True or res.get("msg"):await mi.followup.send(f"✅ **Success!**\n**Action:** `{s.ac}`\n**Value:** `{v}`\n{res.get('msg','')}\n-# *{WATERMARK}*",ephemeral=True)
+     elif res.get("banId"):await mi.followup.send(f"✅ **Banned!**\n**Ban ID:** `{res.get('banId')}`\n**Value:** `{v}`\n-# *{WATERMARK}*",ephemeral=True)
      elif res.get("success")==False and not res.get("error"):await mi.followup.send(f"❌ **Failed**\nNot found or already exists\n-# *{WATERMARK}*",ephemeral=True)
      else:await mi.followup.send(f"❌ **Failed**\n{res.get('error','Unknown error')}\n-# *{WATERMARK}*",ephemeral=True)
     except Exception as e:await mi.followup.send(f"❌ **Error:** {str(e)[:100]}",ephemeral=True)
@@ -839,8 +860,8 @@ async def cmd_sm(ctx):
  except:pass
  embed=discord.Embed(title="⚙️ Shield Management",color=0xE74C3C)
  embed.add_field(name="📝 Format",value="`type:value`\nEx: `hwid:ABC123`\nEx: `playerId:12345`",inline=True)
- embed.add_field(name="📋 Types",value="`playerId`\n`hwid`\n`ip`",inline=True)
- embed.add_field(name="ℹ️ Unban",value="Format sama:\n`playerId:123`\n`hwid:ABC`",inline=True)
+ embed.add_field(name="📋 Ban Types",value="`playerId`\n`hwid`\n`ip`",inline=True)
+ embed.add_field(name="📋 WL/Sus Types",value="`userId`\n`hwid`\n`ip`\n`session`",inline=True)
  embed.set_footer(text=WATERMARK)
  await ctx.send(embed=embed,view=ShieldManageView())
 @bot.command(name="sync",aliases=["resync"])
